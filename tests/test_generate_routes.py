@@ -302,6 +302,19 @@ def test_generate_page_includes_async_generation_urls(client):
     assert "data-generate-scope-preview-url=" in body
 
 
+def test_generate_page_includes_extended_topic_color_options(client):
+    response = client.get("/generate")
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Indigo tag" in body
+    assert "Cyan tag" in body
+    assert "Lime tag" in body
+    assert "Orange tag" in body
+    assert "Red tag" in body
+    assert "Fuchsia tag" in body
+
+
 def test_generate_page_prefills_topic_and_subtopic_from_query(client):
     insert_question("Explain event loops.", topic="Python", subtopic="AsyncIO")
     response = client.get("/generate?topic=python&subtopic=asyncio")

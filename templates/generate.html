@@ -102,9 +102,16 @@
     <div>
       <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic_color">Topic tag color</label>
       <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="topic_color" name="topic_color">
-        <option value="">Keep topic default color</option>
+        <option value="" data-bg="#ffffff" data-text="#0f172a" data-bg-dark="#27272a" data-text-dark="#e4e4e7">Keep topic default color</option>
         {% for code, label in topic_tag_colors %}
-          <option value="{{ code }}">{{ label }}</option>
+          {% set option_style = topic_tag_styles.get(code, topic_tag_styles[default_topic_tag_color]) %}
+          <option
+            value="{{ code }}"
+            data-bg="{{ option_style.bg }}"
+            data-text="{{ option_style.text }}"
+            data-bg-dark="{{ option_style.bg_dark }}"
+            data-text-dark="{{ option_style.text_dark }}"
+          >{{ label }} tag</option>
         {% endfor %}
       </select>
       <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400" id="topic_color_hint">Applied to newly generated questions for this topic.</p>
@@ -133,6 +140,7 @@
       const subtopicMenuBtn = document.getElementById("subtopic_menu_btn");
       const subtopicHint = document.getElementById("subtopic_scope_hint");
       const countInput = document.getElementById("count");
+      const topicColorSelect = document.getElementById("topic_color");
       const topicColorHint = document.getElementById("topic_color_hint");
       const scopeSummary = document.getElementById("scope_summary");
       const scopeTopicTotal = document.getElementById("scope_topic_total");
@@ -164,6 +172,7 @@
       const maxMenuItems = 80;
       let previewTimeoutHandle = null;
       let previewAbortController = null;
+      let resolvedScopeTopicColor = "";
 
       const updateQuestionTypeLabel = () => {
         if (!typeSelect || !hint || !btn) {
@@ -238,12 +247,35 @@
         if (!topicColorHint) {
           return;
         }
-        const code = String(colorCode || "").trim().toLowerCase();
-        const label = topicColorLabels[code];
+        resolvedScopeTopicColor = String(colorCode || "").trim().toLowerCase();
+        const selectedCode = normalize(topicColorSelect ? topicColorSelect.value : "");
+        if (selectedCode && topicColorLabels[selectedCode]) {
+          topicColorHint.textContent = `Override selected: ${topicColorLabels[selectedCode]}. This will be applied to new questions.`;
+          return;
+        }
+
+        const label = topicColorLabels[resolvedScopeTopicColor];
         if (label) {
           topicColorHint.textContent = `This topic currently defaults to ${label}. Pick another color only if you want to override it.`;
         } else {
           topicColorHint.textContent = "Applied to newly generated questions for this topic.";
+        }
+      };
+
+      const applyThemeToColorOptions = (select) => {
+        if (!select) {
+          return;
+        }
+        const isDark = document.documentElement.classList.contains("dark");
+        for (const option of Array.from(select.options)) {
+          const bg = isDark ? option.dataset.bgDark : option.dataset.bg;
+          const text = isDark ? option.dataset.textDark : option.dataset.text;
+          if (bg) {
+            option.style.backgroundColor = bg;
+          }
+          if (text) {
+            option.style.color = text;
+          }
         }
       };
 
@@ -595,6 +627,21 @@
         typeSelect.addEventListener("change", updateQuestionTypeLabel);
       }
       updateQuestionTypeLabel();
+      updateTopicColorHint("");
+
+      if (topicColorSelect) {
+        applyThemeToColorOptions(topicColorSelect);
+        topicColorSelect.addEventListener("change", () => {
+          updateTopicColorHint(resolvedScopeTopicColor);
+        });
+        const themeObserver = new MutationObserver(() => {
+          applyThemeToColorOptions(topicColorSelect);
+        });
+        themeObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+      }
 
       const closeAllMenus = () => {
         hideMenu(topicMenu);

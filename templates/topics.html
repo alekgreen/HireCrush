@@ -42,9 +42,10 @@
             <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-new-name">New topic name</label>
             <input id="topic-new-name" name="new_topic" value="{{ selected_topic }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
             <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-color">Topic tag color</label>
-            <select id="topic-color" name="topic_color" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+            <select id="topic-color" name="topic_color" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30">
               {% for code, label in topic_tag_colors %}
-                <option value="{{ code }}" {% if code == (selected_topic_color or default_topic_tag_color) %}selected{% endif %}>{{ label }}</option>
+                {% set option_style = topic_tag_styles.get(code, topic_tag_styles[default_topic_tag_color]) %}
+                <option value="{{ code }}" data-bg="{{ option_style.bg }}" data-text="{{ option_style.text }}" data-bg-dark="{{ option_style.bg_dark }}" data-text-dark="{{ option_style.text_dark }}" {% if code == (selected_topic_color or default_topic_tag_color) %}selected{% endif %}>{{ label }} tag</option>
               {% endfor %}
             </select>
             <div class="mt-2 flex items-center justify-end gap-2">
@@ -95,9 +96,10 @@
               <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="selected-subtopic-new">New subtopic name</label>
               <input id="selected-subtopic-new" name="new_subtopic" value="{{ selected_subtopic }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
               <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="selected-subtopic-color">Subtopic tag color</label>
-              <select id="selected-subtopic-color" name="subtopic_color" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+              <select id="selected-subtopic-color" name="subtopic_color" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30">
                 {% for code, label in topic_tag_colors %}
-                  <option value="{{ code }}" {% if code == (selected_subtopic_color or selected_topic_color or default_topic_tag_color) %}selected{% endif %}>{{ label }}</option>
+                  {% set option_style = topic_tag_styles.get(code, topic_tag_styles[default_topic_tag_color]) %}
+                  <option value="{{ code }}" data-bg="{{ option_style.bg }}" data-text="{{ option_style.text }}" data-bg-dark="{{ option_style.bg_dark }}" data-text-dark="{{ option_style.text_dark }}" {% if code == (selected_subtopic_color or selected_topic_color or default_topic_tag_color) %}selected{% endif %}>{{ label }} tag</option>
                 {% endfor %}
               </select>
               <div class="mt-2 flex items-center justify-end gap-2">
@@ -187,4 +189,38 @@
     </section>
   {% endif %}
 </section>
+<script>
+  (() => {
+    const applyThemeToColorOptions = (select) => {
+      if (!select) {
+        return;
+      }
+      const isDark = document.documentElement.classList.contains("dark");
+      for (const option of Array.from(select.options)) {
+        const bg = isDark ? option.dataset.bgDark : option.dataset.bg;
+        const text = isDark ? option.dataset.textDark : option.dataset.text;
+        if (bg) {
+          option.style.backgroundColor = bg;
+        }
+        if (text) {
+          option.style.color = text;
+        }
+      }
+    };
+
+    const topicSelect = document.getElementById("topic-color");
+    const subtopicSelect = document.getElementById("selected-subtopic-color");
+    applyThemeToColorOptions(topicSelect);
+    applyThemeToColorOptions(subtopicSelect);
+
+    const themeObserver = new MutationObserver(() => {
+      applyThemeToColorOptions(topicSelect);
+      applyThemeToColorOptions(subtopicSelect);
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+  })();
+</script>
 {% endblock %}
