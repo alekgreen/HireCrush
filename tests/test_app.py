@@ -1,5 +1,6 @@
 from datetime import timedelta
 import io
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import requests
@@ -154,6 +155,75 @@ def test_review_submit_good_updates_question(client):
 
     assert row["repetitions"] == 1
     assert row["interval_days"] == 1
+
+
+def test_review_route_filters_due_question_by_selected_topics(client):
+    insert_question("Explain Python's GIL.", topic="python")
+    insert_question("What is a SQL index?", topic="sql")
+
+    res = client.get("/review?topics=python")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Explain Python&#39;s GIL." in body
+    assert "What is a SQL index?" not in body
+
+
+def test_review_route_passes_randomize_and_topics_to_selector(monkeypatch, client):
+    captured = {}
+
+    def fake_get_due_question(topics=None, randomize=False):
+        captured["topics"] = topics
+        captured["randomize"] = randomize
+        return None
+
+    monkeypatch.setattr(app_module, "get_due_question", fake_get_due_question)
+    monkeypatch.setattr(app_module, "get_next_upcoming", lambda topics=None: None)
+
+    res = client.get("/review?topics=python&topics=sql&randomize=1")
+
+    assert res.status_code == 200
+    assert captured == {"topics": ["python", "sql"], "randomize": True}
+
+
+def test_review_submit_redirect_preserves_filters(client):
+    question_id = insert_question("How does CAP theorem apply in distributed systems?")
+
+    response = client.post(
+        f"/review/{question_id}",
+        data={"grade": "good", "topics": ["python", "sql"], "randomize": "1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    parsed = urlparse(response.headers["Location"])
+    query = parse_qs(parsed.query)
+    assert parsed.path == "/review"
+    assert query.get("topics") == ["python", "sql"]
+    assert query.get("randomize") == ["1"]
+
+
+def test_review_answer_redirect_preserves_filters(monkeypatch, client):
+    question_id = insert_question("Explain eventual consistency.")
+    monkeypatch.setattr(
+        app_module,
+        "call_gemini_for_answer",
+        lambda _question, _topic=None: "Eventual consistency means replicas converge over time.",
+    )
+
+    response = client.post(
+        f"/review/{question_id}/answer",
+        data={"topics": ["distributed systems"], "randomize": "1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    parsed = urlparse(response.headers["Location"])
+    query = parse_qs(parsed.query)
+    assert parsed.path == "/review"
+    assert query.get("qid") == [str(question_id)]
+    assert query.get("topics") == ["distributed systems"]
+    assert query.get("randomize") == ["1"]
 
 
 def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):

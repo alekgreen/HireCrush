@@ -3,6 +3,7 @@ import os
 import re
 import base64
 from datetime import timedelta
+from urllib.parse import parse_qsl
 
 import requests
 from dotenv import load_dotenv
@@ -447,11 +448,64 @@ def apply_review(question_id: int, rating: int) -> None:
     db.commit()
 
 
+def normalize_topic_filters(raw_values: list[str]) -> list[str]:
+    topics: list[str] = []
+    for value in raw_values:
+        topic = str(value).strip()
+        if topic and topic not in topics:
+            topics.append(topic)
+    return topics
+
+
+def is_randomized_review(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def review_redirect(
+    topics: list[str] | None = None,
+    randomize: bool = False,
+    qid: int | None = None,
+    show_feedback: bool = False,
+):
+    params: dict[str, object] = {}
+    if qid is not None:
+        params["qid"] = qid
+    if show_feedback:
+        params["show_feedback"] = 1
+    if randomize:
+        params["randomize"] = 1
+    if topics:
+        params["topics"] = topics
+    return redirect(url_for("review", **params))
+
+
+def extract_review_filters_from_referrer() -> tuple[list[str], bool]:
+    referrer = request.referrer or ""
+    if not referrer:
+        return [], False
+
+    try:
+        query = referrer.split("?", 1)[1]
+    except IndexError:
+        return [], False
+
+    parsed = parse_qsl(query, keep_blank_values=False)
+    topics = normalize_topic_filters([value for key, value in parsed if key == "topics"])
+    randomize = any(key == "randomize" and is_randomized_review(value) for key, value in parsed)
+    return topics, randomize
+
+
 @app.route("/")
 def index():
     stats = get_stats()
     recent = get_recent_questions(limit=10)
-    return render_template("index.html", stats=stats, recent=recent)
+    available_topics = get_existing_topics()
+    return render_template(
+        "index.html",
+        stats=stats,
+        recent=recent,
+        available_topics=available_topics,
+    )
 
 
 @app.route("/generate", methods=["GET", "POST"])
@@ -509,6 +563,8 @@ def generate():
 
 @app.route("/review", methods=["GET"])
 def review():
+    selected_topics = normalize_topic_filters(request.args.getlist("topics"))
+    randomize = is_randomized_review(request.args.get("randomize", ""))
     requested_qid = request.args.get("qid", type=int)
     show_feedback = str(request.args.get("show_feedback", "")).strip().lower() in {
         "1",
@@ -517,13 +573,13 @@ def review():
     }
     question = get_question_by_id(requested_qid) if requested_qid else None
     if question is None:
-        question = get_due_question()
+        question = get_due_question(topics=selected_topics, randomize=randomize)
 
     stats = get_stats()
     upcoming = None
     latest_feedback = None
     if question is None:
-        upcoming = get_next_upcoming()
+        upcoming = get_next_upcoming(topics=selected_topics)
     elif show_feedback:
         latest_feedback = get_latest_feedback(question["id"])
 
@@ -533,6 +589,8 @@ def review():
         stats=stats,
         upcoming=upcoming,
         latest_feedback=latest_feedback,
+        selected_topics=selected_topics,
+        randomize=randomize,
     )
 
 
@@ -546,7 +604,11 @@ def review_submit(question_id: int):
         return redirect(url_for("review"))
 
     apply_review(question_id, rating)
-    return redirect(url_for("review"))
+    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
+    randomize = is_randomized_review(request.form.get("randomize", ""))
+    if not selected_topics and not randomize:
+        selected_topics, randomize = extract_review_filters_from_referrer()
+    return review_redirect(topics=selected_topics, randomize=randomize)
 
 
 @app.route("/review/<int:question_id>/answer", methods=["POST"])
@@ -564,7 +626,11 @@ def review_answer(question_id: int):
     except Exception as exc:
         flash(f"Could not generate answer: {exc}", "error")
 
-    return redirect(url_for("review", qid=question_id))
+    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
+    randomize = is_randomized_review(request.form.get("randomize", ""))
+    if not selected_topics and not randomize:
+        selected_topics, randomize = extract_review_filters_from_referrer()
+    return review_redirect(topics=selected_topics, randomize=randomize, qid=question_id)
 
 
 @app.route("/review/<int:question_id>/feedback", methods=["POST"])
@@ -575,9 +641,13 @@ def review_feedback(question_id: int):
         return redirect(url_for("review"))
 
     user_answer = request.form.get("user_answer", "").strip()
+    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
+    randomize = is_randomized_review(request.form.get("randomize", ""))
+    if not selected_topics and not randomize:
+        selected_topics, randomize = extract_review_filters_from_referrer()
     if len(user_answer) < 20:
         flash("Please enter a longer answer to get meaningful feedback.", "error")
-        return redirect(url_for("review", qid=question_id))
+        return review_redirect(topics=selected_topics, randomize=randomize, qid=question_id)
 
     show_feedback = False
     try:
@@ -596,8 +666,13 @@ def review_feedback(question_id: int):
         flash(f"Could not evaluate answer: {exc}", "error")
 
     if show_feedback:
-        return redirect(url_for("review", qid=question_id, show_feedback=1))
-    return redirect(url_for("review", qid=question_id))
+        return review_redirect(
+            topics=selected_topics,
+            randomize=randomize,
+            qid=question_id,
+            show_feedback=True,
+        )
+    return review_redirect(topics=selected_topics, randomize=randomize, qid=question_id)
 
 
 @app.route("/review/transcribe", methods=["POST"])

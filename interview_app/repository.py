@@ -64,19 +64,40 @@ def get_generation_context_questions(topic: str, limit: int = 120) -> list[str]:
     return context
 
 
-def get_due_question():
+def _normalize_topic_filters(topics: list[str] | None) -> list[str]:
+    if not topics:
+        return []
+    cleaned = []
+    for topic in topics:
+        value = str(topic).strip()
+        if value:
+            cleaned.append(value.lower())
+    return cleaned
+
+
+def get_due_question(topics: list[str] | None = None, randomize: bool = False):
     db = get_db()
     current = iso(now_utc())
-    return db.execute(
-        """
+    filters = _normalize_topic_filters(topics)
+
+    base_query = """
         SELECT *
         FROM questions
         WHERE next_review_at <= ?
-        ORDER BY next_review_at ASC
-        LIMIT 1
-        """,
-        (current,),
-    ).fetchone()
+    """
+    params: list[str] = [current]
+    if filters:
+        placeholders = ", ".join("?" for _ in filters)
+        base_query += (
+            f" AND LOWER(COALESCE(topic, '')) IN ({placeholders})"
+        )
+        params.extend(filters)
+
+    if randomize:
+        base_query += " ORDER BY RANDOM() LIMIT 1"
+    else:
+        base_query += " ORDER BY next_review_at ASC LIMIT 1"
+    return db.execute(base_query, tuple(params)).fetchone()
 
 
 def get_question_by_id(question_id: int):
@@ -84,16 +105,21 @@ def get_question_by_id(question_id: int):
     return db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)).fetchone()
 
 
-def get_next_upcoming():
+def get_next_upcoming(topics: list[str] | None = None):
     db = get_db()
-    return db.execute(
-        """
+    filters = _normalize_topic_filters(topics)
+    query = """
         SELECT *
         FROM questions
-        ORDER BY next_review_at ASC
-        LIMIT 1
-        """
-    ).fetchone()
+    """
+    params: list[str] = []
+    if filters:
+        placeholders = ", ".join("?" for _ in filters)
+        query += f" WHERE LOWER(COALESCE(topic, '')) IN ({placeholders})"
+        params.extend(filters)
+
+    query += " ORDER BY next_review_at ASC LIMIT 1"
+    return db.execute(query, tuple(params)).fetchone()
 
 
 def get_latest_feedback(question_id: int):

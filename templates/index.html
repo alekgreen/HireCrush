@@ -15,10 +15,36 @@
     </article>
   </div>
 
-  <div class="mt-4 flex flex-wrap gap-2">
-    <a class="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('generate') }}">Generate Questions</a>
-    <a class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('review') }}">Start Review</a>
+  <div class="mt-4">
+    <a class="inline-flex rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('generate') }}">Generate Questions</a>
   </div>
+
+  <form class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/70" method="get" action="{{ url_for('review') }}">
+    <p class="mb-2 text-sm font-semibold text-slate-700 dark:text-zinc-200">Start review by topic</p>
+    <p class="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400">Topics (multi-select)</p>
+    <div class="max-h-44 overflow-y-auto rounded-lg border border-slate-300 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+      {% if available_topics %}
+        <div class="grid gap-1 sm:grid-cols-2">
+          {% for topic_name in available_topics %}
+            <label class="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 transition hover:bg-slate-100 dark:text-zinc-100 dark:hover:bg-zinc-700/60">
+              <input class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-900" type="checkbox" name="topics" value="{{ topic_name }}">
+              <span class="break-words">{{ topic_name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="px-2 py-1 text-sm text-slate-500 dark:text-zinc-400">No saved topics yet. Generate questions first.</p>
+      {% endif %}
+    </div>
+    <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Leave empty to review across all topics.</p>
+
+    <label class="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-zinc-200" for="randomize">
+      <input class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-800" id="randomize" name="randomize" type="checkbox" value="1">
+      Randomize next due question
+    </label>
+
+    <button class="mt-3 rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Start Review</button>
+  </form>
 </section>
 
 <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
