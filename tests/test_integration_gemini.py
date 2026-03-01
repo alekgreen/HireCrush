@@ -3,18 +3,19 @@ import os
 import pytest
 import requests
 
-import app as app_module
+from app import app as flask_app
+from interview_app.db import get_db, run_migrations
 
 
 def _gemini_api_key():
-    key = os.getenv("GEMINI_API_KEY") or app_module.app.config.get("GEMINI_API_KEY", "")
+    key = os.getenv("GEMINI_API_KEY") or flask_app.config.get("GEMINI_API_KEY", "")
     if not key or key == "your_gemini_api_key_here":
         pytest.skip("GEMINI_API_KEY is required for integration tests.")
     return key
 
 
 def _select_working_model(api_key: str) -> tuple[str, list[str]]:
-    configured = app_module.app.config.get("GEMINI_MODEL", "")
+    configured = flask_app.config.get("GEMINI_MODEL", "")
     preferred = os.getenv("GEMINI_TEST_MODEL", "")
     candidates = [configured, preferred, "gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
     models = []
@@ -23,11 +24,12 @@ def _select_working_model(api_key: str) -> tuple[str, list[str]]:
             models.append(model)
 
     last_404 = None
+    runtime = flask_app.extensions["runtime"]
     for model in models:
-        app_module.app.config["GEMINI_API_KEY"] = api_key
-        app_module.app.config["GEMINI_MODEL"] = model
+        flask_app.config["GEMINI_API_KEY"] = api_key
+        flask_app.config["GEMINI_MODEL"] = model
         try:
-            questions = app_module._runtime.call_gemini_for_questions("Python backend interviews", 1)
+            questions = runtime.call_gemini_for_questions("Python backend interviews", 1)
             if questions:
                 return model, questions
         except requests.HTTPError as exc:
@@ -52,20 +54,20 @@ def test_call_gemini_for_questions_live_api():
     assert isinstance(questions, list)
     assert len(questions) >= 1
     assert all(isinstance(q, str) and len(q.strip()) >= 10 for q in questions)
-    assert app_module.app.config["GEMINI_MODEL"] == model
+    assert flask_app.config["GEMINI_MODEL"] == model
 
 
 @pytest.mark.integration
 def test_generate_route_live_api_persists_questions(tmp_path):
     api_key = _gemini_api_key()
     model, _ = _select_working_model(api_key)
-    old_database = app_module.app.config["DATABASE"]
-    old_key = app_module.app.config["GEMINI_API_KEY"]
-    old_model = app_module.app.config["GEMINI_MODEL"]
-    old_auto = app_module.app.config.get("AUTO_GENERATE_ANSWERS", True)
+    old_database = flask_app.config["DATABASE"]
+    old_key = flask_app.config["GEMINI_API_KEY"]
+    old_model = flask_app.config["GEMINI_MODEL"]
+    old_auto = flask_app.config.get("AUTO_GENERATE_ANSWERS", True)
 
     db_path = tmp_path / "integration.db"
-    app_module.app.config.update(
+    flask_app.config.update(
         TESTING=True,
         DATABASE=str(db_path),
         GEMINI_API_KEY=api_key,
@@ -74,10 +76,10 @@ def test_generate_route_live_api_persists_questions(tmp_path):
     )
 
     try:
-        with app_module.app.app_context():
-            app_module.run_migrations()
+        with flask_app.app_context():
+            run_migrations()
 
-        with app_module.app.test_client() as client:
+        with flask_app.test_client() as client:
             response = client.post(
                 "/generate",
                 data={"topic": "Data structures", "count": "2"},
@@ -85,26 +87,27 @@ def test_generate_route_live_api_persists_questions(tmp_path):
             )
             assert response.status_code == 200
 
-        with app_module.app.app_context():
-            total = app_module.get_db().execute(
+        with flask_app.app_context():
+            total = get_db().execute(
                 "SELECT COUNT(*) AS c FROM questions"
             ).fetchone()["c"]
         assert total >= 1
     finally:
-        app_module.app.config["DATABASE"] = old_database
-        app_module.app.config["GEMINI_API_KEY"] = old_key
-        app_module.app.config["GEMINI_MODEL"] = old_model
-        app_module.app.config["AUTO_GENERATE_ANSWERS"] = old_auto
+        flask_app.config["DATABASE"] = old_database
+        flask_app.config["GEMINI_API_KEY"] = old_key
+        flask_app.config["GEMINI_MODEL"] = old_model
+        flask_app.config["AUTO_GENERATE_ANSWERS"] = old_auto
 
 
 @pytest.mark.integration
 def test_call_gemini_for_feedback_live_api():
     api_key = _gemini_api_key()
     model, _ = _select_working_model(api_key)
-    app_module.app.config["GEMINI_API_KEY"] = api_key
-    app_module.app.config["GEMINI_MODEL"] = model
+    flask_app.config["GEMINI_API_KEY"] = api_key
+    flask_app.config["GEMINI_MODEL"] = model
+    runtime = flask_app.extensions["runtime"]
 
-    feedback = app_module._runtime.call_gemini_for_feedback(
+    feedback = runtime.call_gemini_for_feedback(
         question="How do you optimize SQL queries?",
         reference_answer="Start with execution plans, index strategy, and query shape improvements.",
         user_answer="I usually add indexes and avoid selecting extra columns.",

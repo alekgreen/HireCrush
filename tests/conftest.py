@@ -2,7 +2,8 @@ from dataclasses import replace
 
 import pytest
 
-import app as app_module
+from app import app as flask_app
+from interview_app.db import get_db, run_migrations
 
 
 def pytest_addoption(parser):
@@ -29,7 +30,7 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture()
 def client(tmp_path):
     db_path = tmp_path / "test.db"
-    app_module.app.config.update(
+    flask_app.config.update(
         TESTING=True,
         DATABASE=str(db_path),
         GEMINI_API_KEY="test-key",
@@ -37,23 +38,23 @@ def client(tmp_path):
         HANDLER_DEPS_OVERRIDE=None,
     )
 
-    with app_module.app.app_context():
-        app_module.run_migrations()
-        db = app_module.get_db()
+    with flask_app.app_context():
+        run_migrations()
+        db = get_db()
         db.execute("DELETE FROM review_feedback")
         db.execute("DELETE FROM review_history")
         db.execute("DELETE FROM questions")
         db.commit()
 
-    with app_module.app.test_client() as test_client:
+    with flask_app.test_client() as test_client:
         yield test_client
-    app_module.app.config["HANDLER_DEPS_OVERRIDE"] = None
+    flask_app.config["HANDLER_DEPS_OVERRIDE"] = None
 
 
 @pytest.fixture()
 def override_handler_deps():
     def _override(*, home=None, generation=None, review=None, catalog=None):
-        base = app_module.build_handler_deps()
+        base = flask_app.extensions["build_handler_deps"]()
         bundle = replace(
             base,
             home=replace(base.home, **(home or {})),
@@ -61,8 +62,8 @@ def override_handler_deps():
             review=replace(base.review, **(review or {})),
             catalog=replace(base.catalog, **(catalog or {})),
         )
-        app_module.app.config["HANDLER_DEPS_OVERRIDE"] = bundle
+        flask_app.config["HANDLER_DEPS_OVERRIDE"] = bundle
         return bundle
 
     yield _override
-    app_module.app.config["HANDLER_DEPS_OVERRIDE"] = None
+    flask_app.config["HANDLER_DEPS_OVERRIDE"] = None

@@ -1,7 +1,9 @@
 import io
 from urllib.parse import parse_qs, urlparse
 
-import app as app_module
+from app import app as flask_app
+from interview_app.db import get_db
+from interview_app.repository import get_question_by_id, save_feedback
 from interview_app.services import question_service
 
 from tests.support import insert_question
@@ -17,8 +19,8 @@ def test_review_submit_good_updates_question(client):
     )
     assert response.status_code == 200
 
-    with app_module.app.app_context():
-        row = app_module.get_db().execute(
+    with flask_app.app_context():
+        row = get_db().execute(
             "SELECT repetitions, interval_days FROM questions WHERE id = ?",
             (question_id,),
         ).fetchone()
@@ -143,8 +145,8 @@ def test_review_answer_route_generates_model_answer(client, override_handler_dep
     def fake_generate_answer_for_question(question_id_value):
         return question_service.generate_answer_for_question(
             question_id=question_id_value,
-            get_db_fn=app_module.get_db,
-            get_question_by_id_fn=app_module.get_question_by_id,
+            get_db_fn=get_db,
+            get_question_by_id_fn=get_question_by_id,
             call_gemini_for_answer_fn=lambda _question, _topic=None: (
                 "Eventual consistency means replicas converge over time."
             ),
@@ -156,8 +158,8 @@ def test_review_answer_route_generates_model_answer(client, override_handler_dep
     res = client.post(f"/review/{question_id}/answer", follow_redirects=True)
     assert res.status_code == 200
 
-    with app_module.app.app_context():
-        row = app_module.get_db().execute(
+    with flask_app.app_context():
+        row = get_db().execute(
             "SELECT suggested_answer FROM questions WHERE id = ?",
             (question_id,),
         ).fetchone()
@@ -189,8 +191,8 @@ def test_review_feedback_route_stores_feedback(client, override_handler_deps):
     )
     assert res.status_code == 200
 
-    with app_module.app.app_context():
-        row = app_module.get_db().execute(
+    with flask_app.app_context():
+        row = get_db().execute(
             "SELECT score, feedback, improved_answer FROM review_feedback WHERE question_id = ?",
             (question_id,),
         ).fetchone()
@@ -205,8 +207,8 @@ def test_review_route_hides_latest_feedback_by_default(client):
         "How does transaction isolation work?",
         suggested_answer="Isolation keeps concurrent transactions from interfering.",
     )
-    with app_module.app.app_context():
-        app_module.save_feedback(
+    with flask_app.app_context():
+        save_feedback(
             question_id,
             "It prevents concurrency bugs.",
             {
@@ -232,8 +234,8 @@ def test_review_route_shows_latest_feedback_with_flag(client):
         "What is optimistic locking?",
         suggested_answer="Optimistic locking checks version conflicts at write time.",
     )
-    with app_module.app.app_context():
-        app_module.save_feedback(
+    with flask_app.app_context():
+        save_feedback(
             question_id,
             "It uses a version field to detect conflicts.",
             {
@@ -316,4 +318,3 @@ def test_review_transcribe_route_rejects_unsupported_format(client):
     assert res.status_code == 400
     payload = res.get_json()
     assert "Unsupported audio format." in payload["error"]
-

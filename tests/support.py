@@ -1,4 +1,6 @@
-import app as app_module
+from app import app as flask_app
+from interview_app.db import get_db
+from interview_app.utils import iso, now_utc, question_hash
 
 
 def insert_question(
@@ -7,9 +9,9 @@ def insert_question(
     suggested_answer=None,
     topic_color=None,
 ):
-    with app_module.app.app_context():
-        db = app_module.get_db()
-        now = app_module.now_utc()
+    with flask_app.app_context():
+        db = get_db()
+        now = now_utc()
         db.execute(
             """
             INSERT INTO questions (
@@ -19,14 +21,13 @@ def insert_question(
             """,
             (
                 text,
-                app_module.question_hash(text),
+                question_hash(text),
                 topic,
                 topic_color,
-                app_module.iso(now),
-                app_module.iso(now),
+                iso(now),
+                iso(now),
                 suggested_answer,
             ),
         )
         db.commit()
         return db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-

@@ -1,5 +1,6 @@
-import app as app_module
+from app import app as flask_app
 from interview_app.db import (
+    get_db,
     list_applied_migrations,
     list_known_migrations,
     list_pending_migrations,
@@ -8,11 +9,11 @@ from interview_app.db import (
 
 
 def test_run_migrations_records_versions(tmp_path):
-    app_module.app.config.update(
+    flask_app.config.update(
         TESTING=True,
         DATABASE=str(tmp_path / "migrations.db"),
     )
-    with app_module.app.app_context():
+    with flask_app.app_context():
         applied = run_migrations()
         expected = [
             "0001_initial_schema",
@@ -21,18 +22,18 @@ def test_run_migrations_records_versions(tmp_path):
         ]
         assert applied == expected
 
-        rows = app_module.get_db().execute(
+        rows = get_db().execute(
             "SELECT version FROM schema_migrations ORDER BY version ASC"
         ).fetchall()
         assert [row["version"] for row in rows] == expected
 
 
 def test_run_migrations_is_idempotent(tmp_path):
-    app_module.app.config.update(
+    flask_app.config.update(
         TESTING=True,
         DATABASE=str(tmp_path / "idempotent.db"),
     )
-    with app_module.app.app_context():
+    with flask_app.app_context():
         first_run = run_migrations()
         second_run = run_migrations()
 
@@ -45,11 +46,11 @@ def test_run_migrations_is_idempotent(tmp_path):
 
 
 def test_migration_status_helpers(tmp_path):
-    app_module.app.config.update(
+    flask_app.config.update(
         TESTING=True,
         DATABASE=str(tmp_path / "status.db"),
     )
-    with app_module.app.app_context():
+    with flask_app.app_context():
         assert list_known_migrations() == [
             "0001_initial_schema",
             "0002_add_suggested_answer",

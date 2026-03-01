@@ -1,6 +1,6 @@
 import requests
 
-import app as app_module
+from app import app as flask_app
 
 
 def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
@@ -33,10 +33,11 @@ def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
         )
 
     monkeypatch.setattr(requests, "post", fake_post)
-    app_module.app.config["GEMINI_API_KEY"] = "test-key"
-    app_module.app.config["GEMINI_MODEL"] = "gemini-3-flash"
+    flask_app.config["GEMINI_API_KEY"] = "test-key"
+    flask_app.config["GEMINI_MODEL"] = "gemini-3-flash"
+    runtime = flask_app.extensions["runtime"]
 
-    questions = app_module._runtime.call_gemini_for_questions("backend", 1)
+    questions = runtime.call_gemini_for_questions("backend", 1)
 
     assert questions == ["What is dependency injection?"]
     assert len(calls) >= 2
@@ -45,7 +46,7 @@ def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
     assert "responseJsonSchema" in first_payload["generationConfig"]
     prompt_text = first_payload["contents"][0]["parts"][0]["text"]
     assert "Language: English" in prompt_text
-    assert app_module.app.config["LAST_WORKING_GEMINI_MODEL"] in (
+    assert flask_app.config["LAST_WORKING_GEMINI_MODEL"] in (
         "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
@@ -82,10 +83,11 @@ def test_call_gemini_for_transcription_uses_audio_payload_and_falls_back_model(m
         )
 
     monkeypatch.setattr(requests, "post", fake_post)
-    app_module.app.config["GEMINI_API_KEY"] = "test-key"
-    app_module.app.config["GEMINI_MODEL"] = "gemini-3-flash"
+    flask_app.config["GEMINI_API_KEY"] = "test-key"
+    flask_app.config["GEMINI_MODEL"] = "gemini-3-flash"
+    runtime = flask_app.extensions["runtime"]
 
-    transcript = app_module._runtime.call_gemini_for_transcription(b"fake-audio", "audio/wav")
+    transcript = runtime.call_gemini_for_transcription(b"fake-audio", "audio/wav")
 
     assert transcript == "This is a transcript."
     assert len(calls) >= 2
@@ -93,9 +95,8 @@ def test_call_gemini_for_transcription_uses_audio_payload_and_falls_back_model(m
     inline_data = first_payload["contents"][0]["parts"][1]["inline_data"]
     assert inline_data["mime_type"] == "audio/wav"
     assert inline_data["data"]
-    assert app_module.app.config["LAST_WORKING_GEMINI_MODEL"] in (
+    assert flask_app.config["LAST_WORKING_GEMINI_MODEL"] in (
         "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
     )
-
