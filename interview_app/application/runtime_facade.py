@@ -12,28 +12,58 @@ class RuntimeCallables:
 
 
 @dataclass(frozen=True)
-class RuntimeDependencies:
+class RuntimeInfraDeps:
     os_getenv: Callable[..., str | None]
     requests_module: Any
+    get_db_fn: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class RuntimeServiceModules:
     gemini_service_module: Any
     generation_service_module: Any
     question_service_module: Any
     review_service_module: Any
+
+
+@dataclass(frozen=True)
+class RuntimeParserDeps:
     parse_json_from_text_fn: Callable[..., Any]
     parse_gemini_questions_fn: Callable[..., list[str]]
-    get_db_fn: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class RuntimeRepositoryDeps:
     get_generation_context_questions_fn: Callable[..., Any]
     get_question_by_id_fn: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class RuntimeUtilityDeps:
     clean_question_text_fn: Callable[..., str]
     question_hash_fn: Callable[..., str]
     now_utc_fn: Callable[..., Any]
     iso_fn: Callable[..., str]
+
+
+@dataclass(frozen=True)
+class RuntimeConfigDeps:
     gemini_model_fallbacks: list[str]
     questions_json_schema: dict
     answer_json_schema: dict
     feedback_json_schema: dict
     default_topic_tag_color_code: str
     max_inline_audio_bytes: int
+
+
+@dataclass(frozen=True)
+class RuntimeDependencies:
+    infra: RuntimeInfraDeps
+    modules: RuntimeServiceModules
+    parsers: RuntimeParserDeps
+    repositories: RuntimeRepositoryDeps
+    utils: RuntimeUtilityDeps
+    config: RuntimeConfigDeps
 
 
 class RuntimeFacade:
@@ -45,27 +75,32 @@ class RuntimeFacade:
         runtime_callables: RuntimeCallables,
     ):
         self._app = app
-        self._os_getenv = deps.os_getenv
-        self._requests = deps.requests_module
-        self._gemini_service = deps.gemini_service_module
-        self._generation_service = deps.generation_service_module
-        self._question_service = deps.question_service_module
-        self._review_service = deps.review_service_module
-        self._parse_json_from_text_fn = deps.parse_json_from_text_fn
-        self._parse_gemini_questions_fn = deps.parse_gemini_questions_fn
-        self._get_db_fn = deps.get_db_fn
-        self._get_generation_context_questions_fn = deps.get_generation_context_questions_fn
-        self._get_question_by_id_fn = deps.get_question_by_id_fn
-        self._clean_question_text_fn = deps.clean_question_text_fn
-        self._question_hash_fn = deps.question_hash_fn
-        self._now_utc_fn = deps.now_utc_fn
-        self._iso_fn = deps.iso_fn
-        self._gemini_model_fallbacks = deps.gemini_model_fallbacks
-        self._questions_json_schema = deps.questions_json_schema
-        self._answer_json_schema = deps.answer_json_schema
-        self._feedback_json_schema = deps.feedback_json_schema
-        self._default_topic_tag_color_code = deps.default_topic_tag_color_code
-        self._max_inline_audio_bytes = deps.max_inline_audio_bytes
+        self._os_getenv = deps.infra.os_getenv
+        self._requests = deps.infra.requests_module
+        self._get_db_fn = deps.infra.get_db_fn
+
+        self._gemini_service = deps.modules.gemini_service_module
+        self._generation_service = deps.modules.generation_service_module
+        self._question_service = deps.modules.question_service_module
+        self._review_service = deps.modules.review_service_module
+
+        self._parse_json_from_text_fn = deps.parsers.parse_json_from_text_fn
+        self._parse_gemini_questions_fn = deps.parsers.parse_gemini_questions_fn
+
+        self._get_generation_context_questions_fn = deps.repositories.get_generation_context_questions_fn
+        self._get_question_by_id_fn = deps.repositories.get_question_by_id_fn
+
+        self._clean_question_text_fn = deps.utils.clean_question_text_fn
+        self._question_hash_fn = deps.utils.question_hash_fn
+        self._now_utc_fn = deps.utils.now_utc_fn
+        self._iso_fn = deps.utils.iso_fn
+
+        self._gemini_model_fallbacks = deps.config.gemini_model_fallbacks
+        self._questions_json_schema = deps.config.questions_json_schema
+        self._answer_json_schema = deps.config.answer_json_schema
+        self._feedback_json_schema = deps.config.feedback_json_schema
+        self._default_topic_tag_color_code = deps.config.default_topic_tag_color_code
+        self._max_inline_audio_bytes = deps.config.max_inline_audio_bytes
         self._runtime_callables = runtime_callables
 
     def gemini_model_candidates(self) -> list[str]:
