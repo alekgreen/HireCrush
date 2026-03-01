@@ -4,7 +4,14 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
-from interview_app import gemini_service, generation_service, question_service, review_service
+from interview_app.handlers import catalog_handler, generation_handler, home_handler, review_handler
+from interview_app.handlers.deps import HandlerDeps
+from interview_app.services import (
+    gemini_service,
+    generation_service,
+    question_service,
+    review_service,
+)
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
@@ -227,282 +234,138 @@ def extract_review_filters_from_referrer() -> tuple[list[str], bool]:
     return review_service.extract_review_filters_from_referrer(request.referrer or "")
 
 
+def build_handler_deps() -> HandlerDeps:
+    return HandlerDeps(
+        get_stats_fn=get_stats,
+        get_recent_questions_fn=get_recent_questions,
+        get_existing_topics_fn=get_existing_topics,
+        add_questions_fn=add_questions,
+        format_http_error_fn=format_http_error,
+        get_recent_topic_color_fn=get_recent_topic_color,
+        get_question_by_id_fn=get_question_by_id,
+        get_due_question_fn=get_due_question,
+        get_next_upcoming_fn=get_next_upcoming,
+        get_latest_feedback_fn=get_latest_feedback,
+        apply_review_fn=apply_review,
+        normalize_topic_filters_fn=normalize_topic_filters,
+        is_randomized_review_fn=is_randomized_review,
+        extract_review_filters_from_referrer_fn=extract_review_filters_from_referrer,
+        review_redirect_fn=review_redirect,
+        generate_answer_for_question_fn=generate_answer_for_question,
+        call_gemini_for_feedback_fn=call_gemini_for_feedback,
+        save_feedback_fn=save_feedback,
+        normalize_audio_mime_type_fn=normalize_audio_mime_type,
+        call_gemini_for_transcription_fn=call_gemini_for_transcription,
+        list_questions_fn=list_questions,
+        list_questions_by_topic_fn=list_questions_by_topic,
+        list_topics_with_stats_fn=list_topics_with_stats,
+        default_generation_language_code=DEFAULT_GENERATION_LANGUAGE_CODE,
+        generation_language_by_code=GENERATION_LANGUAGE_BY_CODE,
+        generation_languages=GENERATION_LANGUAGES,
+        topic_tag_colors=TOPIC_TAG_COLORS,
+        topic_tag_color_by_code=TOPIC_TAG_COLOR_BY_CODE,
+        default_topic_tag_color_code=DEFAULT_TOPIC_TAG_COLOR_CODE,
+        max_inline_audio_bytes=MAX_INLINE_AUDIO_BYTES,
+    )
+
+
 @app.route("/")
 def index():
-    stats = get_stats()
-    recent = get_recent_questions(limit=10)
-    available_topics = get_existing_topics()
-    return render_template(
-        "index.html",
-        stats=stats,
-        recent=recent,
-        available_topics=available_topics,
+    return home_handler.index_page(
+        deps=build_handler_deps(),
+        render_template_fn=render_template,
     )
 
 
 @app.route("/generate", methods=["GET", "POST"])
 def generate():
-    available_topics = get_existing_topics()
-    if request.method == "POST":
-        selected_topic = request.form.get("topic_select", "").strip()
-        custom_topic = request.form.get("topic_new", "").strip()
-        topic_legacy = request.form.get("topic", "").strip()
-        topic = custom_topic or selected_topic or topic_legacy
-        additional_context = request.form.get("additional_context", "").strip()
-        topic_color_raw = request.form.get("topic_color", "").strip().lower()
-        count_raw = request.form.get("count", "5").strip()
-        language_code = request.form.get(
-            "language", DEFAULT_GENERATION_LANGUAGE_CODE
-        ).strip().lower()
-        language = GENERATION_LANGUAGE_BY_CODE.get(language_code)
-
-        if not topic:
-            flash("Topic is required.", "error")
-            return redirect(url_for("generate"))
-        if language is None:
-            flash("Language is invalid.", "error")
-            return redirect(url_for("generate"))
-        if topic_color_raw and topic_color_raw not in TOPIC_TAG_COLOR_BY_CODE:
-            flash("Topic tag color is invalid.", "error")
-            return redirect(url_for("generate"))
-
-        resolved_topic_color = (
-            topic_color_raw
-            or get_recent_topic_color(topic)
-            or DEFAULT_TOPIC_TAG_COLOR_CODE
-        )
-
-        try:
-            count = max(1, min(20, int(count_raw)))
-        except ValueError:
-            flash("Count must be an integer.", "error")
-            return redirect(url_for("generate"))
-
-        try:
-            inserted, duplicates = add_questions(
-                topic,
-                count,
-                language=language,
-                additional_context=additional_context or None,
-                topic_color=resolved_topic_color,
-            )
-        except requests.HTTPError as exc:
-            flash(format_http_error(exc), "error")
-            return redirect(url_for("generate"))
-        except Exception as exc:
-            flash(f"Generation failed: {exc}", "error")
-            return redirect(url_for("generate"))
-
-        if inserted:
-            flash(f"Added {inserted} unique question(s).", "success")
-        if duplicates:
-            flash(
-                f"Could not add {duplicates} question(s) after uniqueness checks.",
-                "info",
-            )
-        return redirect(url_for("index"))
-
-    return render_template(
-        "generate.html",
-        generation_languages=GENERATION_LANGUAGES,
-        selected_language=DEFAULT_GENERATION_LANGUAGE_CODE,
-        available_topics=available_topics,
-        topic_tag_colors=TOPIC_TAG_COLORS,
+    return generation_handler.generate_page(
+        deps=build_handler_deps(),
+        request_obj=request,
+        flash_fn=flash,
+        redirect_fn=redirect,
+        url_for_fn=url_for,
+        render_template_fn=render_template,
     )
 
 
 @app.route("/review", methods=["GET"])
 def review():
-    selected_topics = normalize_topic_filters(request.args.getlist("topics"))
-    randomize = is_randomized_review(request.args.get("randomize", ""))
-    skipped_qid = request.args.get("skip_qid", type=int)
-    requested_qid = request.args.get("qid", type=int)
-    show_feedback = str(request.args.get("show_feedback", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-    question = get_question_by_id(requested_qid) if requested_qid else None
-    if question is None:
-        question = get_due_question(
-            topics=selected_topics,
-            randomize=randomize,
-            exclude_question_id=skipped_qid,
-        )
-        if question is None and skipped_qid is not None:
-            question = get_due_question(topics=selected_topics, randomize=randomize)
-
-    stats = get_stats()
-    upcoming = None
-    latest_feedback = None
-    if question is None:
-        upcoming = get_next_upcoming(topics=selected_topics)
-    elif show_feedback:
-        latest_feedback = get_latest_feedback(question["id"])
-
-    return render_template(
-        "review.html",
-        question=question,
-        stats=stats,
-        upcoming=upcoming,
-        latest_feedback=latest_feedback,
-        selected_topics=selected_topics,
-        randomize=randomize,
+    return review_handler.review_page(
+        deps=build_handler_deps(),
+        request_obj=request,
+        render_template_fn=render_template,
     )
 
 
 @app.route("/review/<int:question_id>", methods=["POST"])
 def review_submit(question_id: int):
-    rating_map = {"again": 2, "hard": 3, "good": 4, "easy": 5}
-    grade = request.form.get("grade", "").strip().lower()
-    rating = rating_map.get(grade)
-    if rating is None:
-        flash("Invalid review grade.", "error")
-        return redirect(url_for("review"))
-
-    apply_review(question_id, rating)
-    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
-    randomize = is_randomized_review(request.form.get("randomize", ""))
-    if not selected_topics and not randomize:
-        selected_topics, randomize = extract_review_filters_from_referrer()
-    return review_redirect(topics=selected_topics, randomize=randomize)
+    return review_handler.review_submit_action(
+        deps=build_handler_deps(),
+        question_id=question_id,
+        request_obj=request,
+        flash_fn=flash,
+        redirect_fn=redirect,
+        url_for_fn=url_for,
+    )
 
 
 @app.route("/review/<int:question_id>/skip", methods=["POST"])
 def review_skip(question_id: int):
-    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
-    randomize = is_randomized_review(request.form.get("randomize", ""))
-    if not selected_topics and not randomize:
-        selected_topics, randomize = extract_review_filters_from_referrer()
-    return review_redirect(
-        topics=selected_topics,
-        randomize=randomize,
-        skip_qid=question_id,
+    return review_handler.review_skip_action(
+        deps=build_handler_deps(),
+        question_id=question_id,
+        request_obj=request,
     )
 
 
 @app.route("/review/<int:question_id>/answer", methods=["POST"])
 def review_answer(question_id: int):
-    question = get_question_by_id(question_id)
-    if question is None:
-        flash("Question not found.", "error")
-        return redirect(url_for("review"))
-
-    try:
-        generate_answer_for_question(question_id)
-        flash("Model answer is ready.", "success")
-    except requests.HTTPError as exc:
-        flash(format_http_error(exc), "error")
-    except Exception as exc:
-        flash(f"Could not generate answer: {exc}", "error")
-
-    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
-    randomize = is_randomized_review(request.form.get("randomize", ""))
-    if not selected_topics and not randomize:
-        selected_topics, randomize = extract_review_filters_from_referrer()
-    return review_redirect(topics=selected_topics, randomize=randomize, qid=question_id)
+    return review_handler.review_answer_action(
+        deps=build_handler_deps(),
+        question_id=question_id,
+        request_obj=request,
+        flash_fn=flash,
+        redirect_fn=redirect,
+        url_for_fn=url_for,
+    )
 
 
 @app.route("/review/<int:question_id>/feedback", methods=["POST"])
 def review_feedback(question_id: int):
-    question = get_question_by_id(question_id)
-    if question is None:
-        flash("Question not found.", "error")
-        return redirect(url_for("review"))
-
-    user_answer = request.form.get("user_answer", "").strip()
-    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
-    randomize = is_randomized_review(request.form.get("randomize", ""))
-    if not selected_topics and not randomize:
-        selected_topics, randomize = extract_review_filters_from_referrer()
-    if len(user_answer) < 20:
-        flash("Please enter a longer answer to get meaningful feedback.", "error")
-        return review_redirect(topics=selected_topics, randomize=randomize, qid=question_id)
-
-    show_feedback = False
-    try:
-        reference_answer = generate_answer_for_question(question_id)
-        result = call_gemini_for_feedback(
-            question=question["text"],
-            reference_answer=reference_answer,
-            user_answer=user_answer,
-        )
-        save_feedback(question_id, user_answer, result)
-        show_feedback = True
-        flash("Feedback generated.", "success")
-    except requests.HTTPError as exc:
-        flash(format_http_error(exc), "error")
-    except Exception as exc:
-        flash(f"Could not evaluate answer: {exc}", "error")
-
-    if show_feedback:
-        return review_redirect(
-            topics=selected_topics,
-            randomize=randomize,
-            qid=question_id,
-            show_feedback=True,
-        )
-    return review_redirect(topics=selected_topics, randomize=randomize, qid=question_id)
+    return review_handler.review_feedback_action(
+        deps=build_handler_deps(),
+        question_id=question_id,
+        request_obj=request,
+        flash_fn=flash,
+        redirect_fn=redirect,
+        url_for_fn=url_for,
+    )
 
 
 @app.route("/review/transcribe", methods=["POST"])
 def review_transcribe():
-    audio_file = request.files.get("audio")
-    if audio_file is None:
-        return jsonify({"error": "Audio file is required."}), 400
-
-    mime_type = normalize_audio_mime_type(audio_file.mimetype or "")
-    if mime_type is None:
-        return (
-            jsonify({"error": "Unsupported audio format. Use WAV, MP3, AIFF, AAC, OGG, or FLAC."}),
-            400,
-        )
-
-    audio_bytes = audio_file.read()
-    if not audio_bytes:
-        return jsonify({"error": "Audio file is empty."}), 400
-    if len(audio_bytes) > MAX_INLINE_AUDIO_BYTES:
-        return jsonify({"error": "Audio file is too large. Keep uploads under 19 MB."}), 400
-
-    try:
-        transcript = call_gemini_for_transcription(audio_bytes, mime_type)
-        return jsonify({"transcript": transcript}), 200
-    except requests.HTTPError as exc:
-        status = getattr(getattr(exc, "response", None), "status_code", 502)
-        if status == 429:
-            return jsonify({"error": format_http_error(exc)}), 429
-        if status in {400, 413, 415}:
-            return jsonify({"error": "Gemini could not process this audio file."}), 400
-        if status == 404:
-            return jsonify({"error": format_http_error(exc)}), 500
-        return jsonify({"error": format_http_error(exc)}), 502
-    except Exception as exc:
-        return jsonify({"error": f"Transcription failed: {exc}"}), 500
+    return review_handler.review_transcribe_action(
+        deps=build_handler_deps(),
+        request_obj=request,
+        jsonify_fn=jsonify,
+    )
 
 
 @app.route("/questions")
 def questions():
-    rows = list_questions(limit=200)
-    return render_template("questions.html", questions=rows)
+    return catalog_handler.questions_page(
+        deps=build_handler_deps(),
+        render_template_fn=render_template,
+    )
 
 
 @app.route("/topics")
 def topics():
-    selected_topic = request.args.get("topic", "").strip()
-    if selected_topic:
-        rows = list_questions_by_topic(selected_topic, limit=400)
-        return render_template(
-            "topics.html",
-            selected_topic=selected_topic,
-            topic_questions=rows,
-        )
-
-    rows = list_topics_with_stats(limit=200)
-    return render_template(
-        "topics.html",
-        topics=rows,
-        selected_topic="",
-        topic_questions=[],
+    return catalog_handler.topics_page(
+        deps=build_handler_deps(),
+        request_obj=request,
+        render_template_fn=render_template,
     )
 
 
