@@ -1,10 +1,9 @@
 import os
-import sys
 
 import requests
 from flask import redirect, request, url_for
 
-from interview_app.application.runtime_facade import RuntimeFacade
+from interview_app.application.runtime_facade import RuntimeCallables, RuntimeFacade
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
@@ -19,7 +18,7 @@ from interview_app.constants import (
 )
 from interview_app.db import get_db, init_db
 from interview_app.presentation.app_factory import create_flask_app
-from interview_app.presentation.deps_factory import build_handler_deps_from_namespace
+from interview_app.presentation.deps_factory import build_handler_deps_bundle
 from interview_app.presentation.routes import register_routes
 from interview_app.repository import (
     get_due_question,
@@ -81,23 +80,13 @@ _runtime = RuntimeFacade(
     feedback_json_schema=FEEDBACK_JSON_SCHEMA,
     default_topic_tag_color_code=DEFAULT_TOPIC_TAG_COLOR_CODE,
     max_inline_audio_bytes=MAX_INLINE_AUDIO_BYTES,
-    get_callable=lambda name: getattr(sys.modules[__name__], name),
+    runtime_callables=RuntimeCallables(
+        get_gemini_generate_json=lambda: _runtime.gemini_generate_json,
+        get_normalize_audio_mime_type=lambda: _runtime.normalize_audio_mime_type,
+        get_call_gemini_for_questions=lambda: _runtime.call_gemini_for_questions,
+        get_call_gemini_for_answer=lambda: _runtime.call_gemini_for_answer,
+    ),
 )
-
-
-gemini_model_candidates = _runtime.gemini_model_candidates
-gemini_generate_json = _runtime.gemini_generate_json
-normalize_audio_mime_type = _runtime.normalize_audio_mime_type
-call_gemini_for_transcription = _runtime.call_gemini_for_transcription
-call_gemini_for_questions = _runtime.call_gemini_for_questions
-call_gemini_for_answer = _runtime.call_gemini_for_answer
-call_gemini_for_feedback = _runtime.call_gemini_for_feedback
-add_questions = _runtime.add_questions
-generate_answer_for_question = _runtime.generate_answer_for_question
-format_http_error = _runtime.format_http_error
-apply_review = _runtime.apply_review
-normalize_topic_filters = _runtime.normalize_topic_filters
-is_randomized_review = _runtime.is_randomized_review
 
 
 def review_redirect(
@@ -122,8 +111,45 @@ def extract_review_filters_from_referrer() -> tuple[list[str], bool]:
     return _runtime.extract_review_filters_from_referrer(request.referrer or "")
 
 
+_default_handler_deps_bundle = build_handler_deps_bundle(
+    get_stats_fn=get_stats,
+    get_recent_questions_fn=get_recent_questions,
+    get_existing_topics_fn=get_existing_topics,
+    add_questions_fn=_runtime.add_questions,
+    format_http_error_fn=_runtime.format_http_error,
+    get_recent_topic_color_fn=get_recent_topic_color,
+    get_question_by_id_fn=get_question_by_id,
+    get_due_question_fn=get_due_question,
+    get_next_upcoming_fn=get_next_upcoming,
+    get_latest_feedback_fn=get_latest_feedback,
+    apply_review_fn=_runtime.apply_review,
+    normalize_topic_filters_fn=_runtime.normalize_topic_filters,
+    is_randomized_review_fn=_runtime.is_randomized_review,
+    extract_review_filters_from_referrer_fn=extract_review_filters_from_referrer,
+    review_redirect_fn=review_redirect,
+    generate_answer_for_question_fn=_runtime.generate_answer_for_question,
+    call_gemini_for_feedback_fn=_runtime.call_gemini_for_feedback,
+    save_feedback_fn=save_feedback,
+    normalize_audio_mime_type_fn=_runtime.normalize_audio_mime_type,
+    call_gemini_for_transcription_fn=_runtime.call_gemini_for_transcription,
+    list_questions_fn=list_questions,
+    list_questions_by_topic_fn=list_questions_by_topic,
+    list_topics_with_stats_fn=list_topics_with_stats,
+    default_generation_language_code=DEFAULT_GENERATION_LANGUAGE_CODE,
+    generation_language_by_code=GENERATION_LANGUAGE_BY_CODE,
+    generation_languages=GENERATION_LANGUAGES,
+    topic_tag_colors=TOPIC_TAG_COLORS,
+    topic_tag_color_by_code=TOPIC_TAG_COLOR_BY_CODE,
+    default_topic_tag_color_code=DEFAULT_TOPIC_TAG_COLOR_CODE,
+    max_inline_audio_bytes=MAX_INLINE_AUDIO_BYTES,
+)
+
+
 def build_handler_deps():
-    return build_handler_deps_from_namespace(sys.modules[__name__])
+    override = app.config.get("HANDLER_DEPS_OVERRIDE")
+    if override is not None:
+        return override
+    return _default_handler_deps_bundle
 
 
 register_routes(app, build_handler_deps)

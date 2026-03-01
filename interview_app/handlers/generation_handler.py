@@ -1,9 +1,17 @@
 import requests
 
-from .deps import HandlerDeps
+from .deps import GenerationHandlerDeps
 
 
-def generate_page(*, deps: HandlerDeps, request_obj, flash_fn, redirect_fn, url_for_fn, render_template_fn):
+def generate_page(
+    *,
+    deps: GenerationHandlerDeps,
+    request_obj,
+    flash_fn,
+    redirect_fn,
+    url_for_fn,
+    render_template_fn,
+):
     available_topics = deps.get_existing_topics_fn()
     if request_obj.method == "POST":
         selected_topic = request_obj.form.get("topic_select", "").strip()

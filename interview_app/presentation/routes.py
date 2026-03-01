@@ -3,22 +3,22 @@ from collections.abc import Callable
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 from interview_app.handlers import catalog_handler, generation_handler, home_handler, review_handler
-from interview_app.handlers.deps import HandlerDeps
+from interview_app.handlers.deps import HandlerDepsBundle
 
 
-DepsProvider = Callable[[], HandlerDeps]
+DepsProvider = Callable[[], HandlerDepsBundle]
 
 
 def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
     def index():
         return home_handler.index_page(
-            deps=deps_provider(),
+            deps=deps_provider().home,
             render_template_fn=render_template,
         )
 
     def generate():
         return generation_handler.generate_page(
-            deps=deps_provider(),
+            deps=deps_provider().generation,
             request_obj=request,
             flash_fn=flash,
             redirect_fn=redirect,
@@ -28,14 +28,14 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
 
     def review():
         return review_handler.review_page(
-            deps=deps_provider(),
+            deps=deps_provider().review,
             request_obj=request,
             render_template_fn=render_template,
         )
 
     def review_submit(question_id: int):
         return review_handler.review_submit_action(
-            deps=deps_provider(),
+            deps=deps_provider().review,
             question_id=question_id,
             request_obj=request,
             flash_fn=flash,
@@ -45,14 +45,14 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
 
     def review_skip(question_id: int):
         return review_handler.review_skip_action(
-            deps=deps_provider(),
+            deps=deps_provider().review,
             question_id=question_id,
             request_obj=request,
         )
 
     def review_answer(question_id: int):
         return review_handler.review_answer_action(
-            deps=deps_provider(),
+            deps=deps_provider().review,
             question_id=question_id,
             request_obj=request,
             flash_fn=flash,
@@ -62,7 +62,7 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
 
     def review_feedback(question_id: int):
         return review_handler.review_feedback_action(
-            deps=deps_provider(),
+            deps=deps_provider().review,
             question_id=question_id,
             request_obj=request,
             flash_fn=flash,
@@ -72,20 +72,20 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
 
     def review_transcribe():
         return review_handler.review_transcribe_action(
-            deps=deps_provider(),
+            deps=deps_provider().review,
             request_obj=request,
             jsonify_fn=jsonify,
         )
 
     def questions():
         return catalog_handler.questions_page(
-            deps=deps_provider(),
+            deps=deps_provider().catalog,
             render_template_fn=render_template,
         )
 
     def topics():
         return catalog_handler.topics_page(
-            deps=deps_provider(),
+            deps=deps_provider().catalog,
             request_obj=request,
             render_template_fn=render_template,
         )

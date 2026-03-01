@@ -1,7 +1,7 @@
-from .deps import HandlerDeps
+from .deps import HomeHandlerDeps
 
 
-def index_page(*, deps: HandlerDeps, render_template_fn):
+def index_page(*, deps: HomeHandlerDeps, render_template_fn):
     stats = deps.get_stats_fn()
     recent = deps.get_recent_questions_fn(limit=10)
     available_topics = deps.get_existing_topics_fn()

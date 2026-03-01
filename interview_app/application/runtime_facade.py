@@ -1,5 +1,14 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True)
+class RuntimeCallables:
+    get_gemini_generate_json: Callable[[], Callable[..., Any]]
+    get_normalize_audio_mime_type: Callable[[], Callable[[str], str | None]]
+    get_call_gemini_for_questions: Callable[[], Callable[..., list[str]]]
+    get_call_gemini_for_answer: Callable[[], Callable[..., str]]
 
 
 class RuntimeFacade:
@@ -28,7 +37,7 @@ class RuntimeFacade:
         feedback_json_schema: dict,
         default_topic_tag_color_code: str,
         max_inline_audio_bytes: int,
-        get_callable: Callable[[str], Callable[..., Any]],
+        runtime_callables: RuntimeCallables,
     ):
         self._app = app
         self._os_getenv = os_getenv
@@ -52,7 +61,7 @@ class RuntimeFacade:
         self._feedback_json_schema = feedback_json_schema
         self._default_topic_tag_color_code = default_topic_tag_color_code
         self._max_inline_audio_bytes = max_inline_audio_bytes
-        self._get_callable = get_callable
+        self._runtime_callables = runtime_callables
 
     def gemini_model_candidates(self) -> list[str]:
         return self._gemini_service.build_model_candidates(
@@ -84,7 +93,7 @@ class RuntimeFacade:
             api_key=self._app.config["GEMINI_API_KEY"],
             model_candidates=self.gemini_model_candidates(),
             http_client=self._requests,
-            normalize_audio_mime_type_fn=self._get_callable("normalize_audio_mime_type"),
+            normalize_audio_mime_type_fn=self._runtime_callables.get_normalize_audio_mime_type(),
             max_inline_audio_bytes=self._max_inline_audio_bytes,
         )
         self._app.config["LAST_WORKING_GEMINI_MODEL"] = model
@@ -104,7 +113,7 @@ class RuntimeFacade:
             language=language,
             existing_questions=existing_questions,
             additional_context=additional_context,
-            generate_json_fn=self._get_callable("gemini_generate_json"),
+            generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
             questions_json_schema=self._questions_json_schema,
             parse_gemini_questions_fn=self._parse_gemini_questions_fn,
         )
@@ -113,7 +122,7 @@ class RuntimeFacade:
         return self._generation_service.call_for_answer(
             question=question,
             topic=topic,
-            generate_json_fn=self._get_callable("gemini_generate_json"),
+            generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
             answer_json_schema=self._answer_json_schema,
         )
 
@@ -122,7 +131,7 @@ class RuntimeFacade:
             question=question,
             reference_answer=reference_answer,
             user_answer=user_answer,
-            generate_json_fn=self._get_callable("gemini_generate_json"),
+            generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
             feedback_json_schema=self._feedback_json_schema,
         )
 
@@ -143,13 +152,13 @@ class RuntimeFacade:
             topic_color=resolved_topic_color,
             get_db_fn=self._get_db_fn,
             get_generation_context_questions_fn=self._get_generation_context_questions_fn,
-            call_gemini_for_questions_fn=self._get_callable("call_gemini_for_questions"),
+            call_gemini_for_questions_fn=self._runtime_callables.get_call_gemini_for_questions(),
             clean_question_text_fn=self._clean_question_text_fn,
             question_hash_fn=self._question_hash_fn,
             now_utc_fn=self._now_utc_fn,
             iso_fn=self._iso_fn,
             auto_generate_answers=bool(self._app.config.get("AUTO_GENERATE_ANSWERS", True)),
-            call_gemini_for_answer_fn=self._get_callable("call_gemini_for_answer"),
+            call_gemini_for_answer_fn=self._runtime_callables.get_call_gemini_for_answer(),
         )
 
     def generate_answer_for_question(self, question_id: int) -> str:
@@ -157,7 +166,7 @@ class RuntimeFacade:
             question_id=question_id,
             get_db_fn=self._get_db_fn,
             get_question_by_id_fn=self._get_question_by_id_fn,
-            call_gemini_for_answer_fn=self._get_callable("call_gemini_for_answer"),
+            call_gemini_for_answer_fn=self._runtime_callables.get_call_gemini_for_answer(),
         )
 
     def format_http_error(self, exc) -> str:

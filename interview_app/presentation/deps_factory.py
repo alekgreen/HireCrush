@@ -1,10 +1,94 @@
 from types import ModuleType
 
-from interview_app.handlers.deps import HandlerDeps
+from interview_app.handlers.deps import (
+    CatalogHandlerDeps,
+    GenerationHandlerDeps,
+    HandlerDepsBundle,
+    HomeHandlerDeps,
+    ReviewHandlerDeps,
+)
 
 
-def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDeps:
-    return HandlerDeps(
+def build_handler_deps_bundle(
+    *,
+    get_stats_fn,
+    get_recent_questions_fn,
+    get_existing_topics_fn,
+    add_questions_fn,
+    format_http_error_fn,
+    get_recent_topic_color_fn,
+    get_question_by_id_fn,
+    get_due_question_fn,
+    get_next_upcoming_fn,
+    get_latest_feedback_fn,
+    apply_review_fn,
+    normalize_topic_filters_fn,
+    is_randomized_review_fn,
+    extract_review_filters_from_referrer_fn,
+    review_redirect_fn,
+    generate_answer_for_question_fn,
+    call_gemini_for_feedback_fn,
+    save_feedback_fn,
+    normalize_audio_mime_type_fn,
+    call_gemini_for_transcription_fn,
+    list_questions_fn,
+    list_questions_by_topic_fn,
+    list_topics_with_stats_fn,
+    default_generation_language_code: str,
+    generation_language_by_code: dict[str, str],
+    generation_languages: list[tuple[str, str]],
+    topic_tag_colors: list[tuple[str, str]],
+    topic_tag_color_by_code: dict[str, str],
+    default_topic_tag_color_code: str,
+    max_inline_audio_bytes: int,
+) -> HandlerDepsBundle:
+    return HandlerDepsBundle(
+        home=HomeHandlerDeps(
+            get_stats_fn=get_stats_fn,
+            get_recent_questions_fn=get_recent_questions_fn,
+            get_existing_topics_fn=get_existing_topics_fn,
+        ),
+        generation=GenerationHandlerDeps(
+            add_questions_fn=add_questions_fn,
+            format_http_error_fn=format_http_error_fn,
+            get_recent_topic_color_fn=get_recent_topic_color_fn,
+            get_existing_topics_fn=get_existing_topics_fn,
+            default_generation_language_code=default_generation_language_code,
+            generation_language_by_code=generation_language_by_code,
+            generation_languages=generation_languages,
+            topic_tag_colors=topic_tag_colors,
+            topic_tag_color_by_code=topic_tag_color_by_code,
+            default_topic_tag_color_code=default_topic_tag_color_code,
+        ),
+        review=ReviewHandlerDeps(
+            get_stats_fn=get_stats_fn,
+            get_question_by_id_fn=get_question_by_id_fn,
+            get_due_question_fn=get_due_question_fn,
+            get_next_upcoming_fn=get_next_upcoming_fn,
+            get_latest_feedback_fn=get_latest_feedback_fn,
+            apply_review_fn=apply_review_fn,
+            normalize_topic_filters_fn=normalize_topic_filters_fn,
+            is_randomized_review_fn=is_randomized_review_fn,
+            extract_review_filters_from_referrer_fn=extract_review_filters_from_referrer_fn,
+            review_redirect_fn=review_redirect_fn,
+            generate_answer_for_question_fn=generate_answer_for_question_fn,
+            call_gemini_for_feedback_fn=call_gemini_for_feedback_fn,
+            save_feedback_fn=save_feedback_fn,
+            normalize_audio_mime_type_fn=normalize_audio_mime_type_fn,
+            call_gemini_for_transcription_fn=call_gemini_for_transcription_fn,
+            format_http_error_fn=format_http_error_fn,
+            max_inline_audio_bytes=max_inline_audio_bytes,
+        ),
+        catalog=CatalogHandlerDeps(
+            list_questions_fn=list_questions_fn,
+            list_questions_by_topic_fn=list_questions_by_topic_fn,
+            list_topics_with_stats_fn=list_topics_with_stats_fn,
+        ),
+    )
+
+
+def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundle:
+    return build_handler_deps_bundle(
         get_stats_fn=namespace.get_stats,
         get_recent_questions_fn=namespace.get_recent_questions,
         get_existing_topics_fn=namespace.get_existing_topics,

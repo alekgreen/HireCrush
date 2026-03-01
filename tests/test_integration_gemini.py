@@ -27,7 +27,7 @@ def _select_working_model(api_key: str) -> tuple[str, list[str]]:
         app_module.app.config["GEMINI_API_KEY"] = api_key
         app_module.app.config["GEMINI_MODEL"] = model
         try:
-            questions = app_module.call_gemini_for_questions("Python backend interviews", 1)
+            questions = app_module._runtime.call_gemini_for_questions("Python backend interviews", 1)
             if questions:
                 return model, questions
         except requests.HTTPError as exc:
@@ -104,7 +104,7 @@ def test_call_gemini_for_feedback_live_api():
     app_module.app.config["GEMINI_API_KEY"] = api_key
     app_module.app.config["GEMINI_MODEL"] = model
 
-    feedback = app_module.call_gemini_for_feedback(
+    feedback = app_module._runtime.call_gemini_for_feedback(
         question="How do you optimize SQL queries?",
         reference_answer="Start with execution plans, index strategy, and query shape improvements.",
         user_answer="I usually add indexes and avoid selecting extra columns.",

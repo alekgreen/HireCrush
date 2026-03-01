@@ -1,12 +1,12 @@
-from .deps import HandlerDeps
+from .deps import CatalogHandlerDeps
 
 
-def questions_page(*, deps: HandlerDeps, render_template_fn):
+def questions_page(*, deps: CatalogHandlerDeps, render_template_fn):
     rows = deps.list_questions_fn(limit=200)
     return render_template_fn("questions.html", questions=rows)
 
 
-def topics_page(*, deps: HandlerDeps, request_obj, render_template_fn):
+def topics_page(*, deps: CatalogHandlerDeps, request_obj, render_template_fn):
     selected_topic = request_obj.args.get("topic", "").strip()
     if selected_topic:
         rows = deps.list_questions_by_topic_fn(selected_topic, limit=400)

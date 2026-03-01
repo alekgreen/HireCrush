@@ -1,9 +1,9 @@
 import requests
 
-from .deps import HandlerDeps
+from .deps import ReviewHandlerDeps
 
 
-def review_page(*, deps: HandlerDeps, request_obj, render_template_fn):
+def review_page(*, deps: ReviewHandlerDeps, request_obj, render_template_fn):
     selected_topics = deps.normalize_topic_filters_fn(request_obj.args.getlist("topics"))
     randomize = deps.is_randomized_review_fn(request_obj.args.get("randomize", ""))
     skipped_qid = request_obj.args.get("skip_qid", type=int)
@@ -43,7 +43,7 @@ def review_page(*, deps: HandlerDeps, request_obj, render_template_fn):
     )
 
 
-def _resolve_review_filters_from_form(*, deps: HandlerDeps, request_obj) -> tuple[list[str], bool]:
+def _resolve_review_filters_from_form(*, deps: ReviewHandlerDeps, request_obj) -> tuple[list[str], bool]:
     selected_topics = deps.normalize_topic_filters_fn(request_obj.form.getlist("topics"))
     randomize = deps.is_randomized_review_fn(request_obj.form.get("randomize", ""))
     if not selected_topics and not randomize:
@@ -51,7 +51,15 @@ def _resolve_review_filters_from_form(*, deps: HandlerDeps, request_obj) -> tupl
     return selected_topics, randomize
 
 
-def review_submit_action(*, deps: HandlerDeps, question_id: int, request_obj, flash_fn, redirect_fn, url_for_fn):
+def review_submit_action(
+    *,
+    deps: ReviewHandlerDeps,
+    question_id: int,
+    request_obj,
+    flash_fn,
+    redirect_fn,
+    url_for_fn,
+):
     rating_map = {"again": 2, "hard": 3, "good": 4, "easy": 5}
     grade = request_obj.form.get("grade", "").strip().lower()
     rating = rating_map.get(grade)
@@ -64,7 +72,7 @@ def review_submit_action(*, deps: HandlerDeps, question_id: int, request_obj, fl
     return deps.review_redirect_fn(topics=selected_topics, randomize=randomize)
 
 
-def review_skip_action(*, deps: HandlerDeps, question_id: int, request_obj):
+def review_skip_action(*, deps: ReviewHandlerDeps, question_id: int, request_obj):
     selected_topics, randomize = _resolve_review_filters_from_form(deps=deps, request_obj=request_obj)
     return deps.review_redirect_fn(
         topics=selected_topics,
@@ -73,7 +81,15 @@ def review_skip_action(*, deps: HandlerDeps, question_id: int, request_obj):
     )
 
 
-def review_answer_action(*, deps: HandlerDeps, question_id: int, request_obj, flash_fn, redirect_fn, url_for_fn):
+def review_answer_action(
+    *,
+    deps: ReviewHandlerDeps,
+    question_id: int,
+    request_obj,
+    flash_fn,
+    redirect_fn,
+    url_for_fn,
+):
     question = deps.get_question_by_id_fn(question_id)
     if question is None:
         flash_fn("Question not found.", "error")
@@ -91,7 +107,15 @@ def review_answer_action(*, deps: HandlerDeps, question_id: int, request_obj, fl
     return deps.review_redirect_fn(topics=selected_topics, randomize=randomize, qid=question_id)
 
 
-def review_feedback_action(*, deps: HandlerDeps, question_id: int, request_obj, flash_fn, redirect_fn, url_for_fn):
+def review_feedback_action(
+    *,
+    deps: ReviewHandlerDeps,
+    question_id: int,
+    request_obj,
+    flash_fn,
+    redirect_fn,
+    url_for_fn,
+):
     question = deps.get_question_by_id_fn(question_id)
     if question is None:
         flash_fn("Question not found.", "error")
@@ -129,7 +153,7 @@ def review_feedback_action(*, deps: HandlerDeps, question_id: int, request_obj, 
     return deps.review_redirect_fn(topics=selected_topics, randomize=randomize, qid=question_id)
 
 
-def review_transcribe_action(*, deps: HandlerDeps, request_obj, jsonify_fn):
+def review_transcribe_action(*, deps: ReviewHandlerDeps, request_obj, jsonify_fn):
     audio_file = request_obj.files.get("audio")
     if audio_file is None:
         return jsonify_fn({"error": "Audio file is required."}), 400

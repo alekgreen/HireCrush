@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 import io
 from urllib.parse import parse_qs, urlparse
@@ -6,6 +7,8 @@ import pytest
 import requests
 
 import app as app_module
+from interview_app.services import generation_service, question_service, review_service
+from interview_app.utils import parse_gemini_questions
 
 
 @pytest.fixture()
@@ -16,6 +19,7 @@ def client(tmp_path):
         DATABASE=str(db_path),
         GEMINI_API_KEY="test-key",
         AUTO_GENERATE_ANSWERS=False,
+        HANDLER_DEPS_OVERRIDE=None,
     )
 
     with app_module.app.app_context():
@@ -28,6 +32,25 @@ def client(tmp_path):
 
     with app_module.app.test_client() as test_client:
         yield test_client
+    app_module.app.config["HANDLER_DEPS_OVERRIDE"] = None
+
+
+@pytest.fixture()
+def override_handler_deps():
+    def _override(*, home=None, generation=None, review=None, catalog=None):
+        base = app_module.build_handler_deps()
+        bundle = replace(
+            base,
+            home=replace(base.home, **(home or {})),
+            generation=replace(base.generation, **(generation or {})),
+            review=replace(base.review, **(review or {})),
+            catalog=replace(base.catalog, **(catalog or {})),
+        )
+        app_module.app.config["HANDLER_DEPS_OVERRIDE"] = bundle
+        return bundle
+
+    yield _override
+    app_module.app.config["HANDLER_DEPS_OVERRIDE"] = None
 
 
 def insert_question(
@@ -62,10 +85,10 @@ def insert_question(
 
 def test_parse_gemini_questions_json_array():
     raw = '["Question one?", "Question two?"]'
-    assert app_module.parse_gemini_questions(raw) == ["Question one?", "Question two?"]
+    assert parse_gemini_questions(raw) == ["Question one?", "Question two?"]
 
 
-def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
+def test_add_questions_skips_duplicates_and_short(client):
     responses = [
         [
             "1) What is polymorphism in OOP?",
@@ -84,10 +107,23 @@ def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
     ):
         return responses[0]
 
-    monkeypatch.setattr(app_module, "call_gemini_for_questions", fake_call)
-
     with app_module.app.app_context():
-        inserted, remaining = app_module.add_questions("backend", 2)
+        inserted, remaining = question_service.add_questions(
+            topic="backend",
+            requested_count=2,
+            language="English",
+            additional_context=None,
+            topic_color="blue",
+            get_db_fn=app_module.get_db,
+            get_generation_context_questions_fn=app_module.get_generation_context_questions,
+            call_gemini_for_questions_fn=fake_call,
+            clean_question_text_fn=app_module.clean_question_text,
+            question_hash_fn=app_module.question_hash,
+            now_utc_fn=app_module.now_utc,
+            iso_fn=app_module.iso,
+            auto_generate_answers=False,
+            call_gemini_for_answer_fn=lambda _question, _topic=None: "",
+        )
         total = app_module.get_db().execute(
             "SELECT COUNT(*) AS c FROM questions"
         ).fetchone()["c"]
@@ -97,7 +133,7 @@ def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
     assert total == 2
 
 
-def test_add_questions_returns_unfilled_when_not_enough_unique(monkeypatch, client):
+def test_add_questions_returns_unfilled_when_not_enough_unique(client):
     def fake_call(
         _topic,
         _count,
@@ -107,10 +143,23 @@ def test_add_questions_returns_unfilled_when_not_enough_unique(monkeypatch, clie
     ):
         return ["What is Python?", "What is Python?"]
 
-    monkeypatch.setattr(app_module, "call_gemini_for_questions", fake_call)
-
     with app_module.app.app_context():
-        inserted, remaining = app_module.add_questions("python", 3)
+        inserted, remaining = question_service.add_questions(
+            topic="python",
+            requested_count=3,
+            language="English",
+            additional_context=None,
+            topic_color="blue",
+            get_db_fn=app_module.get_db,
+            get_generation_context_questions_fn=app_module.get_generation_context_questions,
+            call_gemini_for_questions_fn=fake_call,
+            clean_question_text_fn=app_module.clean_question_text,
+            question_hash_fn=app_module.question_hash,
+            now_utc_fn=app_module.now_utc,
+            iso_fn=app_module.iso,
+            auto_generate_answers=False,
+            call_gemini_for_answer_fn=lambda _question, _topic=None: "",
+        )
 
     assert inserted == 1
     assert remaining == 2
@@ -121,7 +170,13 @@ def test_apply_review_again_sets_quick_retry(client):
 
     with app_module.app.app_context():
         before = app_module.now_utc()
-        app_module.apply_review(question_id, 2)
+        review_service.apply_review(
+            question_id=question_id,
+            rating=2,
+            get_db_fn=app_module.get_db,
+            now_utc_fn=app_module.now_utc,
+            iso_fn=app_module.iso,
+        )
         row = app_module.get_db().execute(
             "SELECT repetitions, interval_days, next_review_at FROM questions WHERE id = ?",
             (question_id,),
@@ -138,7 +193,7 @@ def test_apply_review_again_sets_quick_retry(client):
     assert history_count == 1
 
 
-def test_generate_route_success_flash(monkeypatch, client):
+def test_generate_route_success_flash(client, override_handler_deps):
     def fake_add_questions(
         _topic,
         _count,
@@ -148,7 +203,7 @@ def test_generate_route_success_flash(monkeypatch, client):
     ):
         return 2, 1
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     response = client.post(
         "/generate",
         data={"topic": "system design", "count": "3", "language": "en"},
@@ -193,7 +248,7 @@ def test_review_route_filters_due_question_by_selected_topics(client):
     assert "What is a SQL index?" not in body
 
 
-def test_review_route_passes_randomize_and_topics_to_selector(monkeypatch, client):
+def test_review_route_passes_randomize_and_topics_to_selector(client, override_handler_deps):
     captured = {}
 
     def fake_get_due_question(topics=None, randomize=False, exclude_question_id=None):
@@ -202,8 +257,12 @@ def test_review_route_passes_randomize_and_topics_to_selector(monkeypatch, clien
         captured["exclude_question_id"] = exclude_question_id
         return None
 
-    monkeypatch.setattr(app_module, "get_due_question", fake_get_due_question)
-    monkeypatch.setattr(app_module, "get_next_upcoming", lambda topics=None: None)
+    override_handler_deps(
+        review={
+            "get_due_question_fn": fake_get_due_question,
+            "get_next_upcoming_fn": lambda topics=None: None,
+        }
+    )
 
     res = client.get("/review?topics=python&topics=sql&randomize=1")
 
@@ -232,12 +291,14 @@ def test_review_submit_redirect_preserves_filters(client):
     assert query.get("randomize") == ["1"]
 
 
-def test_review_answer_redirect_preserves_filters(monkeypatch, client):
+def test_review_answer_redirect_preserves_filters(client, override_handler_deps):
     question_id = insert_question("Explain eventual consistency.")
-    monkeypatch.setattr(
-        app_module,
-        "call_gemini_for_answer",
-        lambda _question, _topic=None: "Eventual consistency means replicas converge over time.",
+    override_handler_deps(
+        review={
+            "generate_answer_for_question_fn": lambda _qid: (
+                "Eventual consistency means replicas converge over time."
+            )
+        }
     )
 
     response = client.post(
@@ -341,11 +402,11 @@ def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
             },
         )
 
-    monkeypatch.setattr(app_module.requests, "post", fake_post)
+    monkeypatch.setattr(requests, "post", fake_post)
     app_module.app.config["GEMINI_API_KEY"] = "test-key"
     app_module.app.config["GEMINI_MODEL"] = "gemini-3-flash"
 
-    questions = app_module.call_gemini_for_questions("backend", 1)
+    questions = app_module._runtime.call_gemini_for_questions("backend", 1)
 
     assert questions == ["What is dependency injection?"]
     assert len(calls) >= 2
@@ -361,7 +422,7 @@ def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
     )
 
 
-def test_call_gemini_for_questions_includes_existing_context(monkeypatch):
+def test_call_gemini_for_questions_includes_existing_context():
     captured = {}
 
     def fake_generate_json(prompt, _schema, temperature=0.9):
@@ -369,13 +430,15 @@ def test_call_gemini_for_questions_includes_existing_context(monkeypatch):
         captured["temperature"] = temperature
         return ["Question A?"]
 
-    monkeypatch.setattr(app_module, "gemini_generate_json", fake_generate_json)
-    out = app_module.call_gemini_for_questions(
-        "backend",
-        2,
+    out = generation_service.call_for_questions(
+        topic="backend",
+        count=2,
         language="English",
         existing_questions=["What is dependency injection?", "Explain CAP theorem?"],
         additional_context="Senior backend role. Focus on microservices tradeoffs.",
+        generate_json_fn=fake_generate_json,
+        questions_json_schema=app_module.QUESTIONS_JSON_SCHEMA,
+        parse_gemini_questions_fn=parse_gemini_questions,
     )
 
     assert out == ["Question A?"]
@@ -388,7 +451,7 @@ def test_call_gemini_for_questions_includes_existing_context(monkeypatch):
     assert "Do not repeat or paraphrase any existing question" in captured["prompt"]
 
 
-def test_generate_route_masks_key_in_http_error(monkeypatch, client):
+def test_generate_route_masks_key_in_http_error(client, override_handler_deps):
     response = requests.Response()
     response.status_code = 404
     response.reason = "Not Found"
@@ -404,7 +467,7 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
     ):
         raise http_err
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     res = client.post(
         "/generate",
         data={"topic": "python", "count": "2", "language": "en"},
@@ -417,7 +480,7 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
     assert "SUPERSECRET" not in body
 
 
-def test_generate_route_passes_selected_language(monkeypatch, client):
+def test_generate_route_passes_selected_language(client, override_handler_deps):
     captured = {}
 
     def fake_add_questions(
@@ -434,7 +497,7 @@ def test_generate_route_passes_selected_language(monkeypatch, client):
         captured["topic_color"] = topic_color
         return 1, 0
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     response = client.post(
         "/generate",
         data={"topic": "system design", "count": "2", "language": "es"},
@@ -451,7 +514,7 @@ def test_generate_route_passes_selected_language(monkeypatch, client):
     }
 
 
-def test_generate_route_uses_selected_existing_topic(monkeypatch, client):
+def test_generate_route_uses_selected_existing_topic(client, override_handler_deps):
     captured = {}
 
     def fake_add_questions(
@@ -467,7 +530,7 @@ def test_generate_route_uses_selected_existing_topic(monkeypatch, client):
         captured["topic_color"] = topic_color
         return 1, 0
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     response = client.post(
         "/generate",
         data={"topic_select": "python", "count": "2", "language": "en"},
@@ -480,7 +543,7 @@ def test_generate_route_uses_selected_existing_topic(monkeypatch, client):
     assert captured["topic_color"] == "blue"
 
 
-def test_generate_route_prefers_custom_topic_over_selected(monkeypatch, client):
+def test_generate_route_prefers_custom_topic_over_selected(client, override_handler_deps):
     captured = {}
 
     def fake_add_questions(
@@ -494,7 +557,7 @@ def test_generate_route_prefers_custom_topic_over_selected(monkeypatch, client):
         captured["topic_color"] = topic_color
         return 1, 0
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     response = client.post(
         "/generate",
         data={
@@ -523,7 +586,7 @@ def test_generate_route_rejects_invalid_language(client):
     assert "Language is invalid." in body
 
 
-def test_generate_route_passes_optional_context_and_selected_color(monkeypatch, client):
+def test_generate_route_passes_optional_context_and_selected_color(client, override_handler_deps):
     captured = {}
 
     def fake_add_questions(
@@ -540,7 +603,7 @@ def test_generate_route_passes_optional_context_and_selected_color(monkeypatch, 
         captured["topic_color"] = topic_color
         return 1, 0
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     response = client.post(
         "/generate",
         data={
@@ -580,7 +643,7 @@ def test_generate_route_rejects_invalid_topic_color(client):
     assert "Topic tag color is invalid." in body
 
 
-def test_generate_route_uses_existing_topic_color_when_none_selected(monkeypatch, client):
+def test_generate_route_uses_existing_topic_color_when_none_selected(client, override_handler_deps):
     insert_question("What is a queue?", topic="python", topic_color="rose")
     captured = {}
 
@@ -594,7 +657,7 @@ def test_generate_route_uses_existing_topic_color_when_none_selected(monkeypatch
         captured["topic_color"] = topic_color
         return 1, 0
 
-    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
     response = client.post(
         "/generate",
         data={"topic_select": "python", "count": "2", "language": "en"},
@@ -605,13 +668,21 @@ def test_generate_route_uses_existing_topic_color_when_none_selected(monkeypatch
     assert captured["topic_color"] == "rose"
 
 
-def test_review_answer_route_generates_model_answer(monkeypatch, client):
+def test_review_answer_route_generates_model_answer(client, override_handler_deps):
     question_id = insert_question("Explain eventual consistency.")
 
-    monkeypatch.setattr(
-        app_module,
-        "call_gemini_for_answer",
-        lambda _question, _topic=None: "Eventual consistency means replicas converge over time.",
+    def fake_generate_answer_for_question(question_id_value):
+        return question_service.generate_answer_for_question(
+            question_id=question_id_value,
+            get_db_fn=app_module.get_db,
+            get_question_by_id_fn=app_module.get_question_by_id,
+            call_gemini_for_answer_fn=lambda _question, _topic=None: (
+                "Eventual consistency means replicas converge over time."
+            ),
+        )
+
+    override_handler_deps(
+        review={"generate_answer_for_question_fn": fake_generate_answer_for_question}
     )
     res = client.post(f"/review/{question_id}/answer", follow_redirects=True)
     assert res.status_code == 200
@@ -625,21 +696,21 @@ def test_review_answer_route_generates_model_answer(monkeypatch, client):
     assert "replicas converge over time" in row["suggested_answer"]
 
 
-def test_review_feedback_route_stores_feedback(monkeypatch, client):
+def test_review_feedback_route_stores_feedback(client, override_handler_deps):
     question_id = insert_question(
         "What is a database transaction?",
         suggested_answer="A transaction is an ACID unit of work.",
     )
-    monkeypatch.setattr(
-        app_module,
-        "call_gemini_for_feedback",
-        lambda **_kwargs: {
-            "score": 7,
-            "feedback": "Good start, add isolation and rollback details.",
-            "improved_answer": "A transaction groups operations atomically with ACID guarantees.",
-            "strengths": ["Mentioned ACID"],
-            "gaps": ["No practical example"],
-        },
+    override_handler_deps(
+        review={
+            "call_gemini_for_feedback_fn": lambda **_kwargs: {
+                "score": 7,
+                "feedback": "Good start, add isolation and rollback details.",
+                "improved_answer": "A transaction groups operations atomically with ACID guarantees.",
+                "strengths": ["Mentioned ACID"],
+                "gaps": ["No practical example"],
+            }
+        }
     )
 
     res = client.post(
@@ -713,21 +784,21 @@ def test_review_route_shows_latest_feedback_with_flag(client):
     assert "Good explanation with correct conflict detection idea." in body
 
 
-def test_review_feedback_redirect_includes_show_feedback_flag(monkeypatch, client):
+def test_review_feedback_redirect_includes_show_feedback_flag(client, override_handler_deps):
     question_id = insert_question(
         "Why use indexes in databases?",
         suggested_answer="Indexes speed reads by reducing scanned rows.",
     )
-    monkeypatch.setattr(
-        app_module,
-        "call_gemini_for_feedback",
-        lambda **_kwargs: {
-            "score": 7,
-            "feedback": "Solid base answer.",
-            "improved_answer": "Indexes accelerate lookups by narrowing search paths.",
-            "strengths": [],
-            "gaps": [],
-        },
+    override_handler_deps(
+        review={
+            "call_gemini_for_feedback_fn": lambda **_kwargs: {
+                "score": 7,
+                "feedback": "Solid base answer.",
+                "improved_answer": "Indexes accelerate lookups by narrowing search paths.",
+                "strengths": [],
+                "gaps": [],
+            }
+        }
     )
 
     res = client.post(
@@ -769,11 +840,11 @@ def test_call_gemini_for_transcription_uses_audio_payload_and_falls_back_model(m
             },
         )
 
-    monkeypatch.setattr(app_module.requests, "post", fake_post)
+    monkeypatch.setattr(requests, "post", fake_post)
     app_module.app.config["GEMINI_API_KEY"] = "test-key"
     app_module.app.config["GEMINI_MODEL"] = "gemini-3-flash"
 
-    transcript = app_module.call_gemini_for_transcription(b"fake-audio", "audio/wav")
+    transcript = app_module._runtime.call_gemini_for_transcription(b"fake-audio", "audio/wav")
 
     assert transcript == "This is a transcript."
     assert len(calls) >= 2
@@ -788,11 +859,13 @@ def test_call_gemini_for_transcription_uses_audio_payload_and_falls_back_model(m
     )
 
 
-def test_review_transcribe_route_returns_json_transcript(monkeypatch, client):
-    monkeypatch.setattr(
-        app_module,
-        "call_gemini_for_transcription",
-        lambda _audio_bytes, _mime_type: "Transcribed answer text.",
+def test_review_transcribe_route_returns_json_transcript(client, override_handler_deps):
+    override_handler_deps(
+        review={
+            "call_gemini_for_transcription_fn": lambda _audio_bytes, _mime_type: (
+                "Transcribed answer text."
+            )
+        }
     )
 
     res = client.post(
