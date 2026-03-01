@@ -1,4 +1,5 @@
 from datetime import timedelta
+import io
 
 import pytest
 import requests
@@ -67,7 +68,7 @@ def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
         ]
     ]
 
-    def fake_call(_topic, _count):
+    def fake_call(_topic, _count, language="English", existing_questions=None):
         return responses[0]
 
     monkeypatch.setattr(app_module, "call_gemini_for_questions", fake_call)
@@ -84,7 +85,7 @@ def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
 
 
 def test_add_questions_returns_unfilled_when_not_enough_unique(monkeypatch, client):
-    def fake_call(_topic, _count):
+    def fake_call(_topic, _count, language="English", existing_questions=None):
         return ["What is Python?", "What is Python?"]
 
     monkeypatch.setattr(app_module, "call_gemini_for_questions", fake_call)
@@ -119,13 +120,13 @@ def test_apply_review_again_sets_quick_retry(client):
 
 
 def test_generate_route_success_flash(monkeypatch, client):
-    def fake_add_questions(_topic, _count):
+    def fake_add_questions(_topic, _count, language="English"):
         return 2, 1
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
     response = client.post(
         "/generate",
-        data={"topic": "system design", "count": "3"},
+        data={"topic": "system design", "count": "3", "language": "en"},
         follow_redirects=True,
     )
 
@@ -195,11 +196,37 @@ def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
     first_payload = calls[0][1]
     assert first_payload["generationConfig"]["responseMimeType"] == "application/json"
     assert "responseJsonSchema" in first_payload["generationConfig"]
+    prompt_text = first_payload["contents"][0]["parts"][0]["text"]
+    assert "Language: English" in prompt_text
     assert app_module.app.config["LAST_WORKING_GEMINI_MODEL"] in (
         "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
     )
+
+
+def test_call_gemini_for_questions_includes_existing_context(monkeypatch):
+    captured = {}
+
+    def fake_generate_json(prompt, _schema, temperature=0.9):
+        captured["prompt"] = prompt
+        captured["temperature"] = temperature
+        return ["Question A?"]
+
+    monkeypatch.setattr(app_module, "gemini_generate_json", fake_generate_json)
+    out = app_module.call_gemini_for_questions(
+        "backend",
+        2,
+        language="English",
+        existing_questions=["What is dependency injection?", "Explain CAP theorem?"],
+    )
+
+    assert out == ["Question A?"]
+    assert captured["temperature"] == 0.9
+    assert "Existing questions already stored in the system" in captured["prompt"]
+    assert "What is dependency injection?" in captured["prompt"]
+    assert "Explain CAP theorem?" in captured["prompt"]
+    assert "Do not repeat or paraphrase any existing question" in captured["prompt"]
 
 
 def test_generate_route_masks_key_in_http_error(monkeypatch, client):
@@ -209,13 +236,13 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
     response.url = "https://example.com?key=SUPERSECRET"
     http_err = requests.HTTPError("raw error", response=response)
 
-    def fake_add_questions(_topic, _count):
+    def fake_add_questions(_topic, _count, language="English"):
         raise http_err
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
     res = client.post(
         "/generate",
-        data={"topic": "python", "count": "2"},
+        data={"topic": "python", "count": "2", "language": "en"},
         follow_redirects=True,
     )
 
@@ -223,6 +250,86 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
     assert res.status_code == 200
     assert "Gemini model was not found." in body
     assert "SUPERSECRET" not in body
+
+
+def test_generate_route_passes_selected_language(monkeypatch, client):
+    captured = {}
+
+    def fake_add_questions(_topic, _count, language="English"):
+        captured["topic"] = _topic
+        captured["count"] = _count
+        captured["language"] = language
+        return 1, 0
+
+    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    response = client.post(
+        "/generate",
+        data={"topic": "system design", "count": "2", "language": "es"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "topic": "system design",
+        "count": 2,
+        "language": "Spanish",
+    }
+
+
+def test_generate_route_uses_selected_existing_topic(monkeypatch, client):
+    captured = {}
+
+    def fake_add_questions(_topic, _count, language="English"):
+        captured["topic"] = _topic
+        captured["count"] = _count
+        captured["language"] = language
+        return 1, 0
+
+    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    response = client.post(
+        "/generate",
+        data={"topic_select": "python", "count": "2", "language": "en"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured["topic"] == "python"
+    assert captured["count"] == 2
+
+
+def test_generate_route_prefers_custom_topic_over_selected(monkeypatch, client):
+    captured = {}
+
+    def fake_add_questions(_topic, _count, language="English"):
+        captured["topic"] = _topic
+        return 1, 0
+
+    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    response = client.post(
+        "/generate",
+        data={
+            "topic_select": "python",
+            "topic_new": "distributed systems",
+            "count": "2",
+            "language": "en",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured["topic"] == "distributed systems"
+
+
+def test_generate_route_rejects_invalid_language(client):
+    response = client.post(
+        "/generate",
+        data={"topic": "python", "count": "2", "language": "xx"},
+        follow_redirects=True,
+    )
+
+    body = response.data.decode("utf-8")
+    assert response.status_code == 200
+    assert "Language is invalid." in body
 
 
 def test_review_answer_route_generates_model_answer(monkeypatch, client):
@@ -278,3 +385,87 @@ def test_review_feedback_route_stores_feedback(monkeypatch, client):
     assert row["score"] == 7
     assert "Good start" in row["feedback"]
     assert "ACID guarantees" in row["improved_answer"]
+
+
+def test_call_gemini_for_transcription_uses_audio_payload_and_falls_back_model(monkeypatch, client):
+    class FakeResponse:
+        def __init__(self, status_code, payload=None):
+            self.status_code = status_code
+            self.reason = "Not Found" if status_code == 404 else "OK"
+            self._payload = payload or {}
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise requests.HTTPError(response=self)
+
+        def json(self):
+            return self._payload
+
+    calls = []
+
+    def fake_post(url, json, timeout):
+        calls.append((url, json, timeout))
+        if "gemini-3-flash:" in url:
+            return FakeResponse(404)
+        return FakeResponse(
+            200,
+            {
+                "candidates": [
+                    {"content": {"parts": [{"text": "This is a transcript."}]}}
+                ]
+            },
+        )
+
+    monkeypatch.setattr(app_module.requests, "post", fake_post)
+    app_module.app.config["GEMINI_API_KEY"] = "test-key"
+    app_module.app.config["GEMINI_MODEL"] = "gemini-3-flash"
+
+    transcript = app_module.call_gemini_for_transcription(b"fake-audio", "audio/wav")
+
+    assert transcript == "This is a transcript."
+    assert len(calls) >= 2
+    first_payload = calls[0][1]
+    inline_data = first_payload["contents"][0]["parts"][1]["inline_data"]
+    assert inline_data["mime_type"] == "audio/wav"
+    assert inline_data["data"]
+    assert app_module.app.config["LAST_WORKING_GEMINI_MODEL"] in (
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+    )
+
+
+def test_review_transcribe_route_returns_json_transcript(monkeypatch, client):
+    monkeypatch.setattr(
+        app_module,
+        "call_gemini_for_transcription",
+        lambda _audio_bytes, _mime_type: "Transcribed answer text.",
+    )
+
+    res = client.post(
+        "/review/transcribe",
+        data={"audio": (io.BytesIO(b"RIFFfake"), "answer.wav", "audio/wav")},
+    )
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["transcript"] == "Transcribed answer text."
+
+
+def test_review_transcribe_route_requires_audio_file(client):
+    res = client.post("/review/transcribe", data={})
+
+    assert res.status_code == 400
+    payload = res.get_json()
+    assert "Audio file is required." in payload["error"]
+
+
+def test_review_transcribe_route_rejects_unsupported_format(client):
+    res = client.post(
+        "/review/transcribe",
+        data={"audio": (io.BytesIO(b"fake"), "answer.bin", "application/octet-stream")},
+    )
+
+    assert res.status_code == 400
+    payload = res.get_json()
+    assert "Unsupported audio format." in payload["error"]

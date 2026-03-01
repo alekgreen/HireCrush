@@ -1,13 +1,45 @@
-import hashlib
 import json
 import os
 import re
-import sqlite3
-from datetime import datetime, timedelta, timezone
+import base64
+from datetime import timedelta
 
 import requests
-from flask import Flask, flash, g, redirect, render_template, request, url_for
 from dotenv import load_dotenv
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+
+from interview_app.constants import (
+    ANSWER_JSON_SCHEMA,
+    DEFAULT_GENERATION_LANGUAGE_CODE,
+    FEEDBACK_JSON_SCHEMA,
+    GEMINI_MODEL_FALLBACKS,
+    GENERATION_LANGUAGES,
+    GENERATION_LANGUAGE_BY_CODE,
+    QUESTIONS_JSON_SCHEMA,
+)
+from interview_app.db import close_db, ensure_column, get_db, init_db
+from interview_app.repository import (
+    get_due_question,
+    get_existing_topics,
+    get_generation_context_questions,
+    get_latest_feedback,
+    get_next_upcoming,
+    get_question_by_id,
+    get_recent_questions,
+    get_stats,
+    list_questions,
+    save_feedback,
+)
+from interview_app.utils import (
+    clean_question_text,
+    iso,
+    normalize_text,
+    now_utc,
+    parse_gemini_questions,
+    parse_iso,
+    parse_json_from_text,
+    question_hash,
+)
 
 load_dotenv()
 
@@ -19,258 +51,18 @@ app.config["GEMINI_MODEL"] = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 app.config["AUTO_GENERATE_ANSWERS"] = (
     os.getenv("AUTO_GENERATE_ANSWERS", "true").strip().lower() in {"1", "true", "yes", "on"}
 )
+app.teardown_appcontext(close_db)
 
-GEMINI_MODEL_FALLBACKS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-]
-
-QUESTIONS_JSON_SCHEMA = {
-    "type": "array",
-    "items": {
-        "type": "string",
-        "description": "A single interview question. End the string with a question mark.",
-    },
-    "minItems": 1,
+SUPPORTED_AUDIO_MIME_TYPES = {
+    "audio/wav",
+    "audio/mp3",
+    "audio/mpeg",
+    "audio/aiff",
+    "audio/aac",
+    "audio/ogg",
+    "audio/flac",
 }
-
-ANSWER_JSON_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "answer": {
-            "type": "string",
-            "description": "A strong interview answer in clear and concise language.",
-        }
-    },
-    "required": ["answer"],
-}
-
-FEEDBACK_JSON_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "score": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 10,
-            "description": "How good the user answer is for an interview setting.",
-        },
-        "feedback": {"type": "string", "description": "Direct, actionable feedback."},
-        "improved_answer": {
-            "type": "string",
-            "description": "A stronger example answer the user can study.",
-        },
-        "strengths": {"type": "array", "items": {"type": "string"}},
-        "gaps": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["score", "feedback", "improved_answer"],
-}
-
-
-def get_db() -> sqlite3.Connection:
-    if "db" not in g:
-        g.db = sqlite3.connect(app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
-    return g.db
-
-
-@app.teardown_appcontext
-def close_db(_error) -> None:
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
-
-
-def init_db() -> None:
-    db = get_db()
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            text TEXT NOT NULL,
-            text_hash TEXT NOT NULL UNIQUE,
-            topic TEXT,
-            created_at TEXT NOT NULL,
-            last_reviewed_at TEXT,
-            next_review_at TEXT NOT NULL,
-            suggested_answer TEXT,
-            repetitions INTEGER NOT NULL DEFAULT 0,
-            interval_days INTEGER NOT NULL DEFAULT 0,
-            ease_factor REAL NOT NULL DEFAULT 2.5
-        );
-
-        CREATE TABLE IF NOT EXISTS review_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question_id INTEGER NOT NULL,
-            rating INTEGER NOT NULL,
-            reviewed_at TEXT NOT NULL,
-            old_interval_days INTEGER NOT NULL,
-            new_interval_days INTEGER NOT NULL,
-            old_ease_factor REAL NOT NULL,
-            new_ease_factor REAL NOT NULL,
-            FOREIGN KEY (question_id) REFERENCES questions(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS review_feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question_id INTEGER NOT NULL,
-            user_answer TEXT NOT NULL,
-            score INTEGER NOT NULL,
-            feedback TEXT NOT NULL,
-            improved_answer TEXT NOT NULL,
-            strengths_json TEXT,
-            gaps_json TEXT,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (question_id) REFERENCES questions(id)
-        );
-        """
-    )
-    ensure_column("questions", "suggested_answer", "TEXT")
-    db.commit()
-
-
-def ensure_column(table: str, column: str, definition: str) -> None:
-    db = get_db()
-    cols = db.execute(f"PRAGMA table_info({table})").fetchall()
-    names = {row["name"] for row in cols}
-    if column not in names:
-        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-
-
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def parse_iso(dt_str: str) -> datetime:
-    return datetime.fromisoformat(dt_str)
-
-
-def normalize_text(text: str) -> str:
-    compact = re.sub(r"\s+", " ", text.strip().lower())
-    compact = re.sub(r"^[\d\-\.\)\s]+", "", compact)
-    return compact
-
-
-def question_hash(text: str) -> str:
-    return hashlib.sha256(normalize_text(text).encode("utf-8")).hexdigest()
-
-
-def clean_question_text(text: str) -> str:
-    cleaned = text.strip()
-    cleaned = re.sub(r"^[\d\-\.\)\s]+", "", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    return cleaned
-
-
-def get_stats() -> dict:
-    db = get_db()
-    current = iso(now_utc())
-    total = db.execute("SELECT COUNT(*) AS c FROM questions").fetchone()["c"]
-    due = db.execute(
-        "SELECT COUNT(*) AS c FROM questions WHERE next_review_at <= ?", (current,)
-    ).fetchone()["c"]
-    return {"total": total, "due": due}
-
-
-def get_due_question():
-    db = get_db()
-    current = iso(now_utc())
-    return db.execute(
-        """
-        SELECT *
-        FROM questions
-        WHERE next_review_at <= ?
-        ORDER BY next_review_at ASC
-        LIMIT 1
-        """,
-        (current,),
-    ).fetchone()
-
-
-def get_question_by_id(question_id: int):
-    db = get_db()
-    return db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)).fetchone()
-
-
-def get_next_upcoming():
-    db = get_db()
-    return db.execute(
-        """
-        SELECT *
-        FROM questions
-        ORDER BY next_review_at ASC
-        LIMIT 1
-        """
-    ).fetchone()
-
-
-def get_latest_feedback(question_id: int):
-    db = get_db()
-    row = db.execute(
-        """
-        SELECT user_answer, score, feedback, improved_answer, strengths_json, gaps_json, created_at
-        FROM review_feedback
-        WHERE question_id = ?
-        ORDER BY created_at DESC
-        LIMIT 1
-        """,
-        (question_id,),
-    ).fetchone()
-    if row is None:
-        return None
-
-    def parse_list(value: str | None) -> list[str]:
-        if not value:
-            return []
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return []
-        if not isinstance(parsed, list):
-            return []
-        return [str(item).strip() for item in parsed if str(item).strip()]
-
-    return {
-        "user_answer": row["user_answer"],
-        "score": row["score"],
-        "feedback": row["feedback"],
-        "improved_answer": row["improved_answer"],
-        "strengths": parse_list(row["strengths_json"]),
-        "gaps": parse_list(row["gaps_json"]),
-        "created_at": row["created_at"],
-    }
-
-
-def parse_gemini_questions(raw_text: str) -> list[str]:
-    text = raw_text.strip()
-    if not text:
-        return []
-
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, list):
-            return [str(item).strip() for item in parsed if str(item).strip()]
-        if isinstance(parsed, dict):
-            items = parsed.get("questions", [])
-            return [str(item).strip() for item in items if str(item).strip()]
-    except json.JSONDecodeError:
-        pass
-
-    match = re.search(r"\[[\s\S]+\]", text)
-    if match:
-        try:
-            parsed = json.loads(match.group(0))
-            if isinstance(parsed, list):
-                return [str(item).strip() for item in parsed if str(item).strip()]
-        except json.JSONDecodeError:
-            pass
-
-    lines = [line.strip(" -*\t") for line in text.splitlines()]
-    return [line for line in lines if line.endswith("?")]
+MAX_INLINE_AUDIO_BYTES = 19 * 1024 * 1024
 
 
 def gemini_model_candidates() -> list[str]:
@@ -283,27 +75,6 @@ def gemini_model_candidates() -> list[str]:
         if model and model not in candidates:
             candidates.append(model)
     return candidates
-
-
-def parse_json_from_text(raw_text: str):
-    text = (raw_text or "").strip()
-    if not text:
-        return None
-
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    for pattern in (r"\[[\s\S]+\]", r"\{[\s\S]+\}"):
-        match = re.search(pattern, text)
-        if not match:
-            continue
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            continue
-    return None
 
 
 def gemini_generate_json(prompt: str, response_schema: dict, temperature: float = 0.8):
@@ -353,11 +124,128 @@ def gemini_generate_json(prompt: str, response_schema: dict, temperature: float 
     )
 
 
-def call_gemini_for_questions(topic: str, count: int) -> list[str]:
+def normalize_audio_mime_type(mime_type: str) -> str | None:
+    aliases = {
+        "audio/x-wav": "audio/wav",
+        "audio/wave": "audio/wav",
+        "audio/x-pn-wav": "audio/wav",
+        "audio/x-aiff": "audio/aiff",
+        "audio/mpga": "audio/mpeg",
+    }
+    normalized = aliases.get(mime_type.strip().lower(), mime_type.strip().lower())
+    if normalized in SUPPORTED_AUDIO_MIME_TYPES:
+        return normalized
+    return None
+
+
+def call_gemini_for_transcription(audio_bytes: bytes, mime_type: str) -> str:
+    if not audio_bytes:
+        raise RuntimeError("Audio file is empty.")
+    if len(audio_bytes) > MAX_INLINE_AUDIO_BYTES:
+        raise RuntimeError("Audio file is too large. Keep uploads under 19 MB.")
+
+    normalized_mime_type = normalize_audio_mime_type(mime_type)
+    if normalized_mime_type is None:
+        raise RuntimeError("Unsupported audio format.")
+
+    api_key = app.config["GEMINI_API_KEY"]
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is missing.")
+
+    encoded_audio = base64.b64encode(audio_bytes).decode("ascii")
+    prompt = (
+        "Transcribe this audio clip. Return only the transcript text, "
+        "with punctuation and no additional commentary."
+    )
+
+    tried_models = []
+    for model in gemini_model_candidates():
+        tried_models.append(model)
+        endpoint = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:generateContent?key={api_key}"
+        )
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": normalized_mime_type,
+                                "data": encoded_audio,
+                            }
+                        },
+                    ]
+                }
+            ],
+            "generationConfig": {"temperature": 0.0},
+        }
+
+        response = requests.post(endpoint, json=payload, timeout=60)
+        if response.status_code == 404:
+            continue
+        response.raise_for_status()
+
+        data = response.json()
+        options = data.get("candidates", [])
+        if not options:
+            continue
+        parts = options[0].get("content", {}).get("parts", [])
+        transcript_parts = []
+        for part in parts:
+            text = str(part.get("text", "")).strip()
+            if text:
+                transcript_parts.append(text)
+        if transcript_parts:
+            app.config["LAST_WORKING_GEMINI_MODEL"] = model
+            return "\n".join(transcript_parts)
+
+    tried_list = ", ".join(tried_models) if tried_models else "(none)"
+    raise RuntimeError(
+        "No compatible Gemini model found for this API key. "
+        f"Tried models: {tried_list}"
+    )
+
+
+def call_gemini_for_questions(
+    topic: str,
+    count: int,
+    language: str = "English",
+    existing_questions: list[str] | None = None,
+) -> list[str]:
+    context_block = ""
+    if existing_questions:
+        capped_lines = []
+        total_chars = 0
+        max_chars = 12000
+        for idx, question in enumerate(existing_questions[:120], start=1):
+            compact = re.sub(r"\s+", " ", str(question).strip())
+            if not compact:
+                continue
+            if len(compact) > 220:
+                compact = compact[:217] + "..."
+            line = f"{idx}. {compact}"
+            total_chars += len(line) + 1
+            if total_chars > max_chars:
+                break
+            capped_lines.append(line)
+        if capped_lines:
+            context_block = (
+                "Existing questions already stored in the system:\n"
+                + "\n".join(capped_lines)
+                + "\n"
+            )
+
     prompt = (
         "Generate interview questions.\n"
         f"Topic: {topic}\n"
         f"Count: {count}\n"
+        f"Language: {language}\n"
+        f"Write every question in {language}.\n"
+        "Do not repeat or paraphrase any existing question with the same intent.\n"
+        "A reworded version of an existing question still counts as duplicate.\n"
+        f"{context_block}"
         "Return concise, unique interview questions only."
     )
     parsed = gemini_generate_json(prompt, QUESTIONS_JSON_SCHEMA, temperature=0.9)
@@ -412,7 +300,9 @@ def call_gemini_for_feedback(question: str, reference_answer: str, user_answer: 
     }
 
 
-def add_questions(topic: str, requested_count: int) -> tuple[int, int]:
+def add_questions(
+    topic: str, requested_count: int, language: str = "English"
+) -> tuple[int, int]:
     db = get_db()
     existing_hashes = {
         row["text_hash"] for row in db.execute("SELECT text_hash FROM questions").fetchall()
@@ -420,11 +310,17 @@ def add_questions(topic: str, requested_count: int) -> tuple[int, int]:
     inserted = 0
     attempts = 0
     max_attempts = 5
+    generation_context = get_generation_context_questions(topic, limit=120)
 
     while inserted < requested_count and attempts < max_attempts:
         attempts += 1
         needed = min(10, (requested_count - inserted) * 2)
-        generated = call_gemini_for_questions(topic, needed)
+        generated = call_gemini_for_questions(
+            topic,
+            needed,
+            language=language,
+            existing_questions=generation_context,
+        )
         if not generated:
             continue
 
@@ -455,6 +351,7 @@ def add_questions(topic: str, requested_count: int) -> tuple[int, int]:
                 (text, h, topic, iso(now), iso(now), suggested_answer),
             )
             existing_hashes.add(h)
+            generation_context.append(text)
             inserted += 1
 
     db.commit()
@@ -478,29 +375,6 @@ def generate_answer_for_question(question_id: int) -> str:
     )
     db.commit()
     return answer
-
-
-def save_feedback(question_id: int, user_answer: str, result: dict) -> None:
-    db = get_db()
-    db.execute(
-        """
-        INSERT INTO review_feedback (
-            question_id, user_answer, score, feedback, improved_answer,
-            strengths_json, gaps_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            question_id,
-            user_answer,
-            int(result["score"]),
-            result["feedback"],
-            result["improved_answer"],
-            json.dumps(result.get("strengths", []), ensure_ascii=True),
-            json.dumps(result.get("gaps", []), ensure_ascii=True),
-            iso(now_utc()),
-        ),
-    )
-    db.commit()
 
 
 def format_http_error(exc: requests.HTTPError) -> str:
@@ -576,26 +450,29 @@ def apply_review(question_id: int, rating: int) -> None:
 @app.route("/")
 def index():
     stats = get_stats()
-    db = get_db()
-    recent = db.execute(
-        """
-        SELECT id, text, topic, created_at
-        FROM questions
-        ORDER BY created_at DESC
-        LIMIT 10
-        """
-    ).fetchall()
+    recent = get_recent_questions(limit=10)
     return render_template("index.html", stats=stats, recent=recent)
 
 
 @app.route("/generate", methods=["GET", "POST"])
 def generate():
+    available_topics = get_existing_topics()
     if request.method == "POST":
-        topic = request.form.get("topic", "").strip()
+        selected_topic = request.form.get("topic_select", "").strip()
+        custom_topic = request.form.get("topic_new", "").strip()
+        topic_legacy = request.form.get("topic", "").strip()
+        topic = custom_topic or selected_topic or topic_legacy
         count_raw = request.form.get("count", "5").strip()
+        language_code = request.form.get(
+            "language", DEFAULT_GENERATION_LANGUAGE_CODE
+        ).strip().lower()
+        language = GENERATION_LANGUAGE_BY_CODE.get(language_code)
 
         if not topic:
             flash("Topic is required.", "error")
+            return redirect(url_for("generate"))
+        if language is None:
+            flash("Language is invalid.", "error")
             return redirect(url_for("generate"))
 
         try:
@@ -605,7 +482,7 @@ def generate():
             return redirect(url_for("generate"))
 
         try:
-            inserted, duplicates = add_questions(topic, count)
+            inserted, duplicates = add_questions(topic, count, language=language)
         except requests.HTTPError as exc:
             flash(format_http_error(exc), "error")
             return redirect(url_for("generate"))
@@ -622,7 +499,12 @@ def generate():
             )
         return redirect(url_for("index"))
 
-    return render_template("generate.html")
+    return render_template(
+        "generate.html",
+        generation_languages=GENERATION_LANGUAGES,
+        selected_language=DEFAULT_GENERATION_LANGUAGE_CODE,
+        available_topics=available_topics,
+    )
 
 
 @app.route("/review", methods=["GET"])
@@ -709,17 +591,44 @@ def review_feedback(question_id: int):
     return redirect(url_for("review", qid=question_id))
 
 
+@app.route("/review/transcribe", methods=["POST"])
+def review_transcribe():
+    audio_file = request.files.get("audio")
+    if audio_file is None:
+        return jsonify({"error": "Audio file is required."}), 400
+
+    mime_type = normalize_audio_mime_type(audio_file.mimetype or "")
+    if mime_type is None:
+        return (
+            jsonify({"error": "Unsupported audio format. Use WAV, MP3, AIFF, AAC, OGG, or FLAC."}),
+            400,
+        )
+
+    audio_bytes = audio_file.read()
+    if not audio_bytes:
+        return jsonify({"error": "Audio file is empty."}), 400
+    if len(audio_bytes) > MAX_INLINE_AUDIO_BYTES:
+        return jsonify({"error": "Audio file is too large. Keep uploads under 19 MB."}), 400
+
+    try:
+        transcript = call_gemini_for_transcription(audio_bytes, mime_type)
+        return jsonify({"transcript": transcript}), 200
+    except requests.HTTPError as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", 502)
+        if status == 429:
+            return jsonify({"error": format_http_error(exc)}), 429
+        if status in {400, 413, 415}:
+            return jsonify({"error": "Gemini could not process this audio file."}), 400
+        if status == 404:
+            return jsonify({"error": format_http_error(exc)}), 500
+        return jsonify({"error": format_http_error(exc)}), 502
+    except Exception as exc:
+        return jsonify({"error": f"Transcription failed: {exc}"}), 500
+
+
 @app.route("/questions")
 def questions():
-    db = get_db()
-    rows = db.execute(
-        """
-        SELECT id, text, topic, created_at, next_review_at, interval_days, repetitions, suggested_answer
-        FROM questions
-        ORDER BY next_review_at ASC
-        LIMIT 200
-        """
-    ).fetchall()
+    rows = list_questions(limit=200)
     return render_template("questions.html", questions=rows)
 
 
