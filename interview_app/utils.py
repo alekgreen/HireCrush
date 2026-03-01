@@ -16,6 +16,35 @@ def parse_iso(dt_str: str) -> datetime:
     return datetime.fromisoformat(dt_str)
 
 
+def format_datetime(value) -> str:
+    if value is None:
+        return ""
+
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return ""
+        try:
+            dt = parse_iso(text)
+        except ValueError:
+            return text
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone()
+
+    month = dt.strftime("%b")
+    day = dt.day
+    year = dt.year
+    hour_12 = (dt.hour % 12) or 12
+    minute = dt.strftime("%M")
+    ampm = "AM" if dt.hour < 12 else "PM"
+    timezone_name = dt.tzname() or "local time"
+    return f"{month} {day}, {year} at {hour_12}:{minute} {ampm} {timezone_name}"
+
+
 def normalize_text(text: str) -> str:
     compact = re.sub(r"\\s+", " ", text.strip().lower())
     compact = re.sub(r"^[\\d\\-\\.\\)\\s]+", "", compact)

@@ -31,7 +31,7 @@
           {% for q in topic_questions %}
             <li class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/70">
               <p class="text-sm text-slate-800 dark:text-zinc-100">{{ q.text }}</p>
-              <p class="mt-2 text-xs text-slate-500 dark:text-zinc-400">Next review: {{ q.next_review_at }}</p>
+              <p class="mt-2 text-xs text-slate-500 dark:text-zinc-400">Next review: {{ q.next_review_at|human_datetime }}</p>
             </li>
           {% endfor %}
         </ul>

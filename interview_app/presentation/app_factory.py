@@ -5,6 +5,7 @@ from flask import Flask
 
 from interview_app.constants import DEFAULT_TOPIC_TAG_COLOR_CODE, TOPIC_TAG_STYLE_BY_CODE
 from interview_app.db import close_db
+from interview_app.utils import format_datetime
 
 load_dotenv()
 
@@ -19,6 +20,10 @@ def create_flask_app(import_name: str) -> Flask:
         os.getenv("AUTO_GENERATE_ANSWERS", "true").strip().lower() in {"1", "true", "yes", "on"}
     )
     app.teardown_appcontext(close_db)
+
+    @app.template_filter("human_datetime")
+    def human_datetime_filter(value) -> str:
+        return format_datetime(value)
 
     @app.context_processor
     def inject_topic_tag_style():

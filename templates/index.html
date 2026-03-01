@@ -35,7 +35,7 @@
           {% else %}
             <span class="topic-tag rounded-full border px-2 py-0.5 font-semibold" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};">General</span>
           {% endif %}
-          <span>Added: {{ q.created_at }}</span>
+          <span>Added: {{ q.created_at|human_datetime }}</span>
         </div>
       </li>
       {% endfor %}
