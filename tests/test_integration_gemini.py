@@ -75,7 +75,7 @@ def test_generate_route_live_api_persists_questions(tmp_path):
 
     try:
         with app_module.app.app_context():
-            app_module.init_db()
+            app_module.run_migrations()
 
         with app_module.app.test_client() as client:
             response = client.post(

@@ -23,7 +23,7 @@ def client(tmp_path):
     )
 
     with app_module.app.app_context():
-        app_module.init_db()
+        app_module.run_migrations()
         db = app_module.get_db()
         db.execute("DELETE FROM review_feedback")
         db.execute("DELETE FROM review_history")

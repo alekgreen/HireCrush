@@ -1,5 +1,5 @@
 from interview_app.constants import QUESTIONS_JSON_SCHEMA
-from interview_app.db import get_db, init_db
+from interview_app.db import get_db, run_migrations
 from interview_app.entrypoints.web import create_app
 from interview_app.repository import (
     get_generation_context_questions,
@@ -21,4 +21,3 @@ build_handler_deps = app.extensions["build_handler_deps"]
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-

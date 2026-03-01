@@ -22,7 +22,13 @@ from interview_app.constants import (
     TOPIC_TAG_COLORS,
     TOPIC_TAG_COLOR_BY_CODE,
 )
-from interview_app.db import get_db, run_migrations
+from interview_app.db import (
+    get_db,
+    list_applied_migrations,
+    list_known_migrations,
+    list_pending_migrations,
+    run_migrations,
+)
 from interview_app.presentation.app_factory import create_flask_app
 from interview_app.presentation.deps_factory import HandlerDepsInputs, build_handler_deps_bundle
 from interview_app.presentation.routes import register_routes
@@ -174,5 +180,30 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
         click.echo("Applied migrations:")
         for version in applied:
             click.echo(f"- {version}")
+
+    @app.cli.command("db-status")
+    def db_status_command() -> None:
+        with app.app_context():
+            known = list_known_migrations()
+            applied = list_applied_migrations()
+            pending = list_pending_migrations()
+        click.echo(f"Known migrations: {len(known)}")
+        click.echo(f"Applied migrations: {len(applied)}")
+        click.echo(f"Pending migrations: {len(pending)}")
+        if pending:
+            click.echo("Pending versions:")
+            for version in pending:
+                click.echo(f"- {version}")
+
+    @app.cli.command("db-history")
+    def db_history_command() -> None:
+        with app.app_context():
+            applied = list_applied_migrations()
+        if not applied:
+            click.echo("No migrations have been applied.")
+            return
+        click.echo("Applied migration history:")
+        for version, applied_at in applied:
+            click.echo(f"- {version} @ {applied_at}")
 
     return app

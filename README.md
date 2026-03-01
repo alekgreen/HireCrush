@@ -47,6 +47,13 @@ AUTO_GENERATE_ANSWERS=true
 flask --app app db-upgrade
 ```
 
+Optional migration inspection commands:
+
+```bash
+flask --app app db-status
+flask --app app db-history
+```
+
 5. Run app:
 
 ```bash
