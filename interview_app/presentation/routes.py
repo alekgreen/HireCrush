@@ -2,7 +2,13 @@ from collections.abc import Callable
 
 from flask import Flask, current_app, flash, jsonify, redirect, render_template, request, url_for
 
-from interview_app.handlers import catalog_handler, generation_handler, home_handler, review_handler
+from interview_app.handlers import (
+    catalog_handler,
+    generation_handler,
+    home_handler,
+    review_handler,
+    settings_handler,
+)
 from interview_app.handlers.deps import HandlerDepsBundle
 
 
@@ -104,6 +110,16 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
             render_template_fn=render_template,
         )
 
+    def settings():
+        return settings_handler.settings_page(
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+            render_template_fn=render_template,
+            app_obj=current_app._get_current_object(),
+        )
+
     def topics():
         return catalog_handler.topics_page(
             deps=deps_provider().catalog,
@@ -183,6 +199,7 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
         methods=["GET"],
     )
     app.add_url_rule("/review", endpoint="review", view_func=review, methods=["GET"])
+    app.add_url_rule("/settings", endpoint="settings", view_func=settings, methods=["GET", "POST"])
     app.add_url_rule(
         "/review/<int:question_id>",
         endpoint="review_submit",

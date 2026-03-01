@@ -20,6 +20,7 @@ from interview_app.adapters.persistence.sqlite.repositories import (
     SQLiteFeedbackRepository,
     SQLiteQuestionRepository,
 )
+from interview_app.adapters.persistence.sqlite.settings_repository import SQLiteSettingsRepository
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     CODE_REVIEW_QUESTION_SCHEMA,
@@ -57,6 +58,7 @@ from interview_app.services import (
     generation_service,
     question_service,
     review_service,
+    secure_token_store,
 )
 from interview_app.utils import (
     clean_question_text,
@@ -75,6 +77,19 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
 
     question_repository = SQLiteQuestionRepository()
     feedback_repository = SQLiteFeedbackRepository()
+    settings_repository = SQLiteSettingsRepository()
+
+    explicit_model_override = bool(config_override and "GEMINI_MODEL" in config_override)
+    explicit_api_key_override = bool(config_override and "GEMINI_API_KEY" in config_override)
+    if not explicit_model_override:
+        with app.app_context():
+            persisted_model = settings_repository.get_value("gemini_model")
+        if persisted_model:
+            app.config["GEMINI_MODEL"] = persisted_model
+    if not explicit_api_key_override:
+        persisted_api_key = secure_token_store.get_gemini_api_key()
+        if persisted_api_key:
+            app.config["GEMINI_API_KEY"] = persisted_api_key
 
     runtime_ref: dict[str, RuntimeFacade] = {}
     runtime_callables = RuntimeCallables(
@@ -221,6 +236,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
 
     app.extensions["runtime"] = runtime
     app.extensions["build_handler_deps"] = build_handler_deps
+    app.extensions["settings_repository"] = settings_repository
     register_routes(app, build_handler_deps)
 
     @app.cli.command("db-upgrade")

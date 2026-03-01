@@ -19,7 +19,13 @@ Python Flask web app that:
 
 ## Setup
 
-1. Create a virtual environment and install dependencies:
+1. Run bootstrap script (recommended):
+
+```bash
+./setup.sh
+```
+
+2. Manual setup (if you prefer):
 
 ```bash
 python -m venv .venv
@@ -27,21 +33,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2. Create env file:
+3. Optional: create `.env` only if you want to override defaults:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Set your Gemini API key in `.env`:
+4. Optional `.env` values:
 
 ```bash
-GEMINI_API_KEY=your_real_key
-GEMINI_MODEL=gemini-2.5-flash
-AUTO_GENERATE_ANSWERS=true
+FLASK_SECRET_KEY=change-this-secret
+DATABASE_PATH=interview.db
 ```
 
-4. Run migrations:
+Gemini model/API key can be configured from **Settings** in the app UI (or via env vars if you prefer).
+
+5. Run migrations:
 
 ```bash
 flask --app app db-upgrade
@@ -54,7 +61,7 @@ flask --app app db-status
 flask --app app db-history
 ```
 
-5. Run app:
+6. Run app:
 
 ```bash
 python app.py
@@ -81,6 +88,12 @@ Integration tests require a valid `GEMINI_API_KEY`.
 - New cards are due immediately.
 - `Again` schedules a quick retry (10 minutes).
 - Other grades schedule by interval in days.
-- Change `GEMINI_MODEL` in `.env` if you want a different model.
+- Preferred Gemini models can be selected in `Settings`:
+  `gemini-3.1-pro-preview`, `gemini-3-pro-preview`, `gemini-3-flash-preview`,
+  `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`,
+  `gemini-2.0-flash`, `gemini-2.0-flash-lite`.
+- Gemini API key can be stored securely in local OS credential storage via `keyring` from `Settings`.
+- If no OS keyring backend is available, the app falls back to `keyrings.alt` local storage (not OS-secure keychain storage).
+- Run `./setup.sh` and check the backend summary at the end to confirm which mode is active.
 - Optional: set `GEMINI_FALLBACK_MODELS` (comma-separated) for additional automatic model fallback.
 - Set `AUTO_GENERATE_ANSWERS=false` if you prefer generating model answers on-demand in review.

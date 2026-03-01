@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+  <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-400">Runtime configuration</p>
+  <h2 class="font-display text-2xl text-slate-900 dark:text-zinc-100">Settings</h2>
+  <p class="mt-2 text-sm text-slate-600 dark:text-zinc-300">Choose Gemini model and manage API token.</p>
+
+  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+    <article class="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/70">
+      <p class="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400">Current model</p>
+      <p class="mt-1 text-sm font-semibold text-slate-800 dark:text-zinc-100">{{ current_model or "Not configured" }}</p>
+      {% if not current_model_supported and current_model %}
+        <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">Current model is not in the selectable list below.</p>
+      {% endif %}
+    </article>
+    <article class="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/70">
+      <p class="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400">Gemini key source</p>
+      {% if current_key_source == "secure_local_storage" %}
+        <p class="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Secure local storage</p>
+      {% elif current_key_source == "keyrings_alt_fallback" %}
+        <p class="mt-1 text-sm font-semibold text-amber-700 dark:text-amber-300">keyrings.alt fallback storage</p>
+      {% elif current_key_source == "environment" %}
+        <p class="mt-1 text-sm font-semibold text-slate-800 dark:text-zinc-100">Environment variable</p>
+      {% else %}
+        <p class="mt-1 text-sm font-semibold text-slate-800 dark:text-zinc-100">No API key configured</p>
+      {% endif %}
+      {% if not keyring_available %}
+        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Install a recommended keyring backend or `keyrings.alt` for local fallback storage.</p>
+      {% elif keyring_backend_mode == "keyrings_alt" %}
+        <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">Using keyrings.alt fallback (not OS-secure keychain storage).</p>
+      {% elif has_stored_api_key %}
+        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">A key exists in secure local storage.</p>
+      {% endif %}
+    </article>
+  </div>
+
+  <form class="mt-5 space-y-4" method="post" action="{{ url_for('settings') }}">
+    <div>
+      <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400" for="gemini-model">Gemini model</label>
+      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100" id="gemini-model" name="gemini_model" required>
+        {% for model in selectable_models %}
+          <option value="{{ model }}" {{ "selected" if model == current_model else "" }}>{{ model }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400" for="gemini-api-key">Gemini API key</label>
+      <input autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100" id="gemini-api-key" name="gemini_api_key" placeholder="Leave blank to keep current key" type="password">
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Uses OS keychain when available, otherwise keyrings.alt fallback if installed.</p>
+    </div>
+
+    <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-zinc-200" for="clear-gemini-api-key">
+      <input class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-900" id="clear-gemini-api-key" name="clear_gemini_api_key" type="checkbox" value="1">
+      <span>Clear stored Gemini API key</span>
+    </label>
+
+    <div class="flex flex-wrap justify-end gap-2">
+      <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Save Settings</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
