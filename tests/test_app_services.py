@@ -1,9 +1,9 @@
 from datetime import timedelta
 
 from app import app as flask_app
+from interview_app.adapters.persistence.sqlite.repositories import SQLiteQuestionRepository
 from interview_app.constants import QUESTIONS_JSON_SCHEMA
 from interview_app.db import get_db
-from interview_app.repository import get_generation_context_questions
 from interview_app.services import generation_service, question_service, review_service
 from interview_app.utils import (
     clean_question_text,
@@ -15,6 +15,8 @@ from interview_app.utils import (
 )
 
 from tests.support import insert_question
+
+question_repository = SQLiteQuestionRepository()
 
 
 def test_parse_gemini_questions_json_array():
@@ -49,7 +51,7 @@ def test_add_questions_skips_duplicates_and_short(client):
             additional_context=None,
             topic_color="blue",
             get_db_fn=get_db,
-            get_generation_context_questions_fn=get_generation_context_questions,
+            get_generation_context_questions_fn=question_repository.get_generation_context_questions,
             call_gemini_for_questions_fn=fake_call,
             clean_question_text_fn=clean_question_text,
             question_hash_fn=question_hash,
@@ -85,7 +87,7 @@ def test_add_questions_returns_unfilled_when_not_enough_unique(client):
             additional_context=None,
             topic_color="blue",
             get_db_fn=get_db,
-            get_generation_context_questions_fn=get_generation_context_questions,
+            get_generation_context_questions_fn=question_repository.get_generation_context_questions,
             call_gemini_for_questions_fn=fake_call,
             clean_question_text_fn=clean_question_text,
             question_hash_fn=question_hash,

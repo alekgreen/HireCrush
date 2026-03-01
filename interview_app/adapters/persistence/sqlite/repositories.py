@@ -1,57 +1,299 @@
+import json
+from collections.abc import Callable
 from typing import Any
 
 from interview_app.application.ports.repositories import FeedbackRepository, QuestionRepository
-from interview_app import repository as sqlite_repo
+from interview_app.db import get_db
+from interview_app.utils import iso, now_utc
 
 
 class SQLiteQuestionRepository(QuestionRepository):
+    def __init__(
+        self,
+        *,
+        get_db_fn: Callable[..., Any] = get_db,
+        now_utc_fn: Callable[..., Any] = now_utc,
+        iso_fn: Callable[..., str] = iso,
+    ):
+        self._get_db = get_db_fn
+        self._now_utc = now_utc_fn
+        self._iso = iso_fn
+
     def get_stats(self) -> dict:
-        return sqlite_repo.get_stats()
+        db = self._get_db()
+        current = self._iso(self._now_utc())
+        total = db.execute("SELECT COUNT(*) AS c FROM questions").fetchone()["c"]
+        due = db.execute(
+            "SELECT COUNT(*) AS c FROM questions WHERE next_review_at <= ?", (current,)
+        ).fetchone()["c"]
+        return {"total": total, "due": due}
 
     def get_existing_topics(self, limit: int = 100) -> list[str]:
-        return sqlite_repo.get_existing_topics(limit=limit)
+        db = self._get_db()
+        rows = db.execute(
+            """
+            SELECT topic, COUNT(*) AS usage_count
+            FROM questions
+            WHERE topic IS NOT NULL AND TRIM(topic) <> ''
+            GROUP BY topic
+            ORDER BY usage_count DESC, topic ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [str(row["topic"]).strip() for row in rows if str(row["topic"]).strip()]
 
     def get_recent_topic_color(self, topic: str) -> str | None:
-        return sqlite_repo.get_recent_topic_color(topic)
+        db = self._get_db()
+        topic_clean = topic.strip()
+        if not topic_clean:
+            return None
+
+        row = db.execute(
+            """
+            SELECT topic_color
+            FROM questions
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+              AND topic_color IS NOT NULL
+              AND TRIM(topic_color) <> ''
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (topic_clean,),
+        ).fetchone()
+        if row is None:
+            return None
+        color = str(row["topic_color"]).strip().lower()
+        return color or None
 
     def get_generation_context_questions(self, topic: str, limit: int = 120) -> list[str]:
-        return sqlite_repo.get_generation_context_questions(topic, limit=limit)
+        db = self._get_db()
+        topic_clean = topic.strip()
+        if not topic_clean:
+            return []
+
+        same_topic_rows = db.execute(
+            """
+            SELECT text
+            FROM questions
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (topic_clean, limit),
+        ).fetchall()
+        context = [str(row["text"]).strip() for row in same_topic_rows if str(row["text"]).strip()]
+
+        if len(context) < limit:
+            remaining = limit - len(context)
+            other_rows = db.execute(
+                """
+                SELECT text
+                FROM questions
+                WHERE LOWER(COALESCE(topic, '')) != LOWER(?)
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (topic_clean, remaining),
+            ).fetchall()
+            context.extend(str(row["text"]).strip() for row in other_rows if str(row["text"]).strip())
+        return context
+
+    @staticmethod
+    def _normalize_topic_filters(topics: list[str] | None) -> list[str]:
+        if not topics:
+            return []
+        cleaned = []
+        for topic in topics:
+            value = str(topic).strip()
+            if value:
+                cleaned.append(value.lower())
+        return cleaned
 
     def get_due_question(
         self,
         topics: list[str] | None = None,
         randomize: bool = False,
         exclude_question_id: int | None = None,
-    ) -> Any:
-        return sqlite_repo.get_due_question(
-            topics=topics,
-            randomize=randomize,
-            exclude_question_id=exclude_question_id,
-        )
+    ):
+        db = self._get_db()
+        current = self._iso(self._now_utc())
+        filters = self._normalize_topic_filters(topics)
 
-    def get_question_by_id(self, question_id: int) -> Any:
-        return sqlite_repo.get_question_by_id(question_id)
+        base_query = """
+            SELECT *
+            FROM questions
+            WHERE next_review_at <= ?
+        """
+        params: list[str | int] = [current]
+        if filters:
+            placeholders = ", ".join("?" for _ in filters)
+            base_query += f" AND LOWER(COALESCE(topic, '')) IN ({placeholders})"
+            params.extend(filters)
+        if exclude_question_id is not None:
+            base_query += " AND id != ?"
+            params.append(int(exclude_question_id))
 
-    def get_next_upcoming(self, topics: list[str] | None = None) -> Any:
-        return sqlite_repo.get_next_upcoming(topics=topics)
+        if randomize:
+            base_query += " ORDER BY RANDOM() LIMIT 1"
+        else:
+            base_query += " ORDER BY next_review_at ASC LIMIT 1"
+        return db.execute(base_query, tuple(params)).fetchone()
 
-    def get_recent_questions(self, limit: int = 10) -> Any:
-        return sqlite_repo.get_recent_questions(limit=limit)
+    def get_question_by_id(self, question_id: int):
+        db = self._get_db()
+        return db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)).fetchone()
 
-    def list_questions(self, limit: int = 200) -> Any:
-        return sqlite_repo.list_questions(limit=limit)
+    def get_next_upcoming(self, topics: list[str] | None = None):
+        db = self._get_db()
+        filters = self._normalize_topic_filters(topics)
+        query = """
+            SELECT *
+            FROM questions
+        """
+        params: list[str] = []
+        if filters:
+            placeholders = ", ".join("?" for _ in filters)
+            query += f" WHERE LOWER(COALESCE(topic, '')) IN ({placeholders})"
+            params.extend(filters)
 
-    def list_topics_with_stats(self, limit: int = 200) -> Any:
-        return sqlite_repo.list_topics_with_stats(limit=limit)
+        query += " ORDER BY next_review_at ASC LIMIT 1"
+        return db.execute(query, tuple(params)).fetchone()
 
-    def list_questions_by_topic(self, topic: str, limit: int = 400) -> Any:
-        return sqlite_repo.list_questions_by_topic(topic, limit=limit)
+    def get_recent_questions(self, limit: int = 10):
+        db = self._get_db()
+        return db.execute(
+            """
+            SELECT id, text, topic, topic_color, created_at
+            FROM questions
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    def list_questions(self, limit: int = 200):
+        db = self._get_db()
+        return db.execute(
+            """
+            SELECT id, text, topic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            FROM questions
+            ORDER BY next_review_at ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    def list_topics_with_stats(self, limit: int = 200):
+        db = self._get_db()
+        current = self._iso(self._now_utc())
+        return db.execute(
+            """
+            SELECT
+                q.topic AS topic,
+                COUNT(*) AS total_questions,
+                SUM(CASE WHEN q.next_review_at <= ? THEN 1 ELSE 0 END) AS due_questions,
+                (
+                    SELECT qq.topic_color
+                    FROM questions qq
+                    WHERE LOWER(COALESCE(qq.topic, '')) = LOWER(COALESCE(q.topic, ''))
+                      AND qq.topic_color IS NOT NULL
+                      AND TRIM(qq.topic_color) <> ''
+                    ORDER BY qq.created_at DESC
+                    LIMIT 1
+                ) AS topic_color
+            FROM questions q
+            WHERE q.topic IS NOT NULL AND TRIM(q.topic) <> ''
+            GROUP BY q.topic
+            ORDER BY total_questions DESC, q.topic ASC
+            LIMIT ?
+            """,
+            (current, limit),
+        ).fetchall()
+
+    def list_questions_by_topic(self, topic: str, limit: int = 400):
+        db = self._get_db()
+        topic_clean = topic.strip()
+        if not topic_clean:
+            return []
+        return db.execute(
+            """
+            SELECT id, text, topic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            FROM questions
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+            ORDER BY next_review_at ASC
+            LIMIT ?
+            """,
+            (topic_clean, limit),
+        ).fetchall()
 
 
 class SQLiteFeedbackRepository(FeedbackRepository):
-    def get_latest_feedback(self, question_id: int) -> Any:
-        return sqlite_repo.get_latest_feedback(question_id)
+    def __init__(
+        self,
+        *,
+        get_db_fn: Callable[..., Any] = get_db,
+        now_utc_fn: Callable[..., Any] = now_utc,
+        iso_fn: Callable[..., str] = iso,
+    ):
+        self._get_db = get_db_fn
+        self._now_utc = now_utc_fn
+        self._iso = iso_fn
+
+    def get_latest_feedback(self, question_id: int):
+        db = self._get_db()
+        row = db.execute(
+            """
+            SELECT user_answer, score, feedback, improved_answer, strengths_json, gaps_json, created_at
+            FROM review_feedback
+            WHERE question_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (question_id,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        def parse_list(value: str | None) -> list[str]:
+            if not value:
+                return []
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return []
+            if not isinstance(parsed, list):
+                return []
+            return [str(item).strip() for item in parsed if str(item).strip()]
+
+        return {
+            "user_answer": row["user_answer"],
+            "score": row["score"],
+            "feedback": row["feedback"],
+            "improved_answer": row["improved_answer"],
+            "strengths": parse_list(row["strengths_json"]),
+            "gaps": parse_list(row["gaps_json"]),
+            "created_at": row["created_at"],
+        }
 
     def save_feedback(self, question_id: int, user_answer: str, result: dict) -> None:
-        sqlite_repo.save_feedback(question_id, user_answer, result)
-
+        db = self._get_db()
+        db.execute(
+            """
+            INSERT INTO review_feedback (
+                question_id, user_answer, score, feedback, improved_answer,
+                strengths_json, gaps_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                question_id,
+                user_answer,
+                int(result["score"]),
+                result["feedback"],
+                result["improved_answer"],
+                json.dumps(result.get("strengths", []), ensure_ascii=True),
+                json.dumps(result.get("gaps", []), ensure_ascii=True),
+                self._iso(self._now_utc()),
+            ),
+        )
+        db.commit()
