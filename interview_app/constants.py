@@ -44,6 +44,25 @@ GENERATION_LANGUAGES = [
 DEFAULT_GENERATION_LANGUAGE_CODE = "en"
 GENERATION_LANGUAGE_BY_CODE = {code: label for code, label in GENERATION_LANGUAGES}
 
+TOPIC_TAG_COLORS = [
+    ("blue", "Blue"),
+    ("emerald", "Emerald"),
+    ("amber", "Amber"),
+    ("rose", "Rose"),
+    ("violet", "Violet"),
+    ("slate", "Slate"),
+]
+DEFAULT_TOPIC_TAG_COLOR_CODE = "blue"
+TOPIC_TAG_COLOR_BY_CODE = {code: label for code, label in TOPIC_TAG_COLORS}
+TOPIC_TAG_STYLE_BY_CODE = {
+    "blue": {"border": "#bfdbfe", "bg": "#eff6ff", "text": "#1d4ed8"},
+    "emerald": {"border": "#a7f3d0", "bg": "#ecfdf5", "text": "#047857"},
+    "amber": {"border": "#fcd34d", "bg": "#fffbeb", "text": "#b45309"},
+    "rose": {"border": "#fecdd3", "bg": "#fff1f2", "text": "#be123c"},
+    "violet": {"border": "#ddd6fe", "bg": "#f5f3ff", "text": "#6d28d9"},
+    "slate": {"border": "#cbd5e1", "bg": "#f8fafc", "text": "#334155"},
+}
+
 QUESTIONS_JSON_SCHEMA = {
     "type": "array",
     "items": {

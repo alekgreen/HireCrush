@@ -12,13 +12,17 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, url
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
+    DEFAULT_TOPIC_TAG_COLOR_CODE,
     FEEDBACK_JSON_SCHEMA,
     GEMINI_MODEL_FALLBACKS,
     GENERATION_LANGUAGES,
     GENERATION_LANGUAGE_BY_CODE,
     QUESTIONS_JSON_SCHEMA,
+    TOPIC_TAG_COLORS,
+    TOPIC_TAG_COLOR_BY_CODE,
+    TOPIC_TAG_STYLE_BY_CODE,
 )
-from interview_app.db import close_db, ensure_column, get_db, init_db
+from interview_app.db import close_db, get_db, init_db
 from interview_app.repository import (
     get_due_question,
     get_existing_topics,
@@ -26,9 +30,12 @@ from interview_app.repository import (
     get_latest_feedback,
     get_next_upcoming,
     get_question_by_id,
+    get_recent_topic_color,
     get_recent_questions,
     get_stats,
+    list_questions_by_topic,
     list_questions,
+    list_topics_with_stats,
     save_feedback,
 )
 from interview_app.utils import (
@@ -64,6 +71,14 @@ SUPPORTED_AUDIO_MIME_TYPES = {
     "audio/flac",
 }
 MAX_INLINE_AUDIO_BYTES = 19 * 1024 * 1024
+
+
+@app.context_processor
+def inject_topic_tag_style():
+    return {
+        "topic_tag_styles": TOPIC_TAG_STYLE_BY_CODE,
+        "default_topic_tag_color": DEFAULT_TOPIC_TAG_COLOR_CODE,
+    }
 
 
 def gemini_model_candidates() -> list[str]:
@@ -214,6 +229,7 @@ def call_gemini_for_questions(
     count: int,
     language: str = "English",
     existing_questions: list[str] | None = None,
+    additional_context: str | None = None,
 ) -> list[str]:
     context_block = ""
     if existing_questions:
@@ -238,6 +254,17 @@ def call_gemini_for_questions(
                 + "\n"
             )
 
+    additional_context_block = ""
+    if additional_context:
+        compact_context = re.sub(r"\s+", " ", str(additional_context).strip())
+        if compact_context:
+            if len(compact_context) > 1200:
+                compact_context = compact_context[:1200].rstrip() + "..."
+            additional_context_block = (
+                "Additional user context to follow when generating questions:\n"
+                f"{compact_context}\n"
+            )
+
     prompt = (
         "Generate interview questions.\n"
         f"Topic: {topic}\n"
@@ -246,6 +273,7 @@ def call_gemini_for_questions(
         f"Write every question in {language}.\n"
         "Do not repeat or paraphrase any existing question with the same intent.\n"
         "A reworded version of an existing question still counts as duplicate.\n"
+        f"{additional_context_block}"
         f"{context_block}"
         "Return concise, unique interview questions only."
     )
@@ -302,7 +330,11 @@ def call_gemini_for_feedback(question: str, reference_answer: str, user_answer: 
 
 
 def add_questions(
-    topic: str, requested_count: int, language: str = "English"
+    topic: str,
+    requested_count: int,
+    language: str = "English",
+    additional_context: str | None = None,
+    topic_color: str = DEFAULT_TOPIC_TAG_COLOR_CODE,
 ) -> tuple[int, int]:
     db = get_db()
     existing_hashes = {
@@ -321,6 +353,7 @@ def add_questions(
             needed,
             language=language,
             existing_questions=generation_context,
+            additional_context=additional_context,
         )
         if not generated:
             continue
@@ -345,11 +378,11 @@ def add_questions(
             db.execute(
                 """
                 INSERT INTO questions (
-                    text, text_hash, topic, created_at, next_review_at,
+                    text, text_hash, topic, topic_color, created_at, next_review_at,
                     suggested_answer, repetitions, interval_days, ease_factor
-                ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
                 """,
-                (text, h, topic, iso(now), iso(now), suggested_answer),
+                (text, h, topic, topic_color, iso(now), iso(now), suggested_answer),
             )
             existing_hashes.add(h)
             generation_context.append(text)
@@ -519,6 +552,8 @@ def generate():
         custom_topic = request.form.get("topic_new", "").strip()
         topic_legacy = request.form.get("topic", "").strip()
         topic = custom_topic or selected_topic or topic_legacy
+        additional_context = request.form.get("additional_context", "").strip()
+        topic_color_raw = request.form.get("topic_color", "").strip().lower()
         count_raw = request.form.get("count", "5").strip()
         language_code = request.form.get(
             "language", DEFAULT_GENERATION_LANGUAGE_CODE
@@ -531,6 +566,15 @@ def generate():
         if language is None:
             flash("Language is invalid.", "error")
             return redirect(url_for("generate"))
+        if topic_color_raw and topic_color_raw not in TOPIC_TAG_COLOR_BY_CODE:
+            flash("Topic tag color is invalid.", "error")
+            return redirect(url_for("generate"))
+
+        resolved_topic_color = (
+            topic_color_raw
+            or get_recent_topic_color(topic)
+            or DEFAULT_TOPIC_TAG_COLOR_CODE
+        )
 
         try:
             count = max(1, min(20, int(count_raw)))
@@ -539,7 +583,13 @@ def generate():
             return redirect(url_for("generate"))
 
         try:
-            inserted, duplicates = add_questions(topic, count, language=language)
+            inserted, duplicates = add_questions(
+                topic,
+                count,
+                language=language,
+                additional_context=additional_context or None,
+                topic_color=resolved_topic_color,
+            )
         except requests.HTTPError as exc:
             flash(format_http_error(exc), "error")
             return redirect(url_for("generate"))
@@ -561,6 +611,7 @@ def generate():
         generation_languages=GENERATION_LANGUAGES,
         selected_language=DEFAULT_GENERATION_LANGUAGE_CODE,
         available_topics=available_topics,
+        topic_tag_colors=TOPIC_TAG_COLORS,
     )
 
 
@@ -737,6 +788,26 @@ def review_transcribe():
 def questions():
     rows = list_questions(limit=200)
     return render_template("questions.html", questions=rows)
+
+
+@app.route("/topics")
+def topics():
+    selected_topic = request.args.get("topic", "").strip()
+    if selected_topic:
+        rows = list_questions_by_topic(selected_topic, limit=400)
+        return render_template(
+            "topics.html",
+            selected_topic=selected_topic,
+            topic_questions=rows,
+        )
+
+    rows = list_topics_with_stats(limit=200)
+    return render_template(
+        "topics.html",
+        topics=rows,
+        selected_topic="",
+        topic_questions=[],
+    )
 
 
 with app.app_context():

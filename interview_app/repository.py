@@ -30,6 +30,30 @@ def get_existing_topics(limit: int = 100) -> list[str]:
     return [str(row["topic"]).strip() for row in rows if str(row["topic"]).strip()]
 
 
+def get_recent_topic_color(topic: str) -> str | None:
+    db = get_db()
+    topic_clean = topic.strip()
+    if not topic_clean:
+        return None
+
+    row = db.execute(
+        """
+        SELECT topic_color
+        FROM questions
+        WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+          AND topic_color IS NOT NULL
+          AND TRIM(topic_color) <> ''
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (topic_clean,),
+    ).fetchone()
+    if row is None:
+        return None
+    color = str(row["topic_color"]).strip().lower()
+    return color or None
+
+
 def get_generation_context_questions(topic: str, limit: int = 120) -> list[str]:
     db = get_db()
     topic_clean = topic.strip()
@@ -193,7 +217,7 @@ def get_recent_questions(limit: int = 10):
     db = get_db()
     return db.execute(
         """
-        SELECT id, text, topic, created_at
+        SELECT id, text, topic, topic_color, created_at
         FROM questions
         ORDER BY created_at DESC
         LIMIT ?
@@ -206,10 +230,55 @@ def list_questions(limit: int = 200):
     db = get_db()
     return db.execute(
         """
-        SELECT id, text, topic, created_at, next_review_at, interval_days, repetitions, suggested_answer
+        SELECT id, text, topic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
         FROM questions
         ORDER BY next_review_at ASC
         LIMIT ?
         """,
         (limit,),
+    ).fetchall()
+
+
+def list_topics_with_stats(limit: int = 200):
+    db = get_db()
+    current = iso(now_utc())
+    return db.execute(
+        """
+        SELECT
+            q.topic AS topic,
+            COUNT(*) AS total_questions,
+            SUM(CASE WHEN q.next_review_at <= ? THEN 1 ELSE 0 END) AS due_questions,
+            (
+                SELECT qq.topic_color
+                FROM questions qq
+                WHERE LOWER(COALESCE(qq.topic, '')) = LOWER(COALESCE(q.topic, ''))
+                  AND qq.topic_color IS NOT NULL
+                  AND TRIM(qq.topic_color) <> ''
+                ORDER BY qq.created_at DESC
+                LIMIT 1
+            ) AS topic_color
+        FROM questions q
+        WHERE q.topic IS NOT NULL AND TRIM(q.topic) <> ''
+        GROUP BY q.topic
+        ORDER BY total_questions DESC, q.topic ASC
+        LIMIT ?
+        """,
+        (current, limit),
+    ).fetchall()
+
+
+def list_questions_by_topic(topic: str, limit: int = 400):
+    db = get_db()
+    topic_clean = topic.strip()
+    if not topic_clean:
+        return []
+    return db.execute(
+        """
+        SELECT id, text, topic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+        FROM questions
+        WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+        ORDER BY next_review_at ASC
+        LIMIT ?
+        """,
+        (topic_clean, limit),
     ).fetchall()

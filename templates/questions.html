@@ -21,7 +21,14 @@
             <tr class="align-top">
               <td class="whitespace-nowrap px-3 py-2 font-medium text-slate-900 dark:text-zinc-100">{{ q.id }}</td>
               <td class="px-3 py-2">{{ q.text }}</td>
-              <td class="px-3 py-2">{{ q.topic or "General" }}</td>
+              <td class="px-3 py-2">
+                {% set topic_style = topic_tag_styles.get(q.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+                {% if q.topic %}
+                  <a class="rounded-full border px-2 py-0.5 font-semibold no-underline" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};" href="{{ url_for('topics', topic=q.topic) }}">{{ q.topic }}</a>
+                {% else %}
+                  <span class="rounded-full border px-2 py-0.5 font-semibold" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};">General</span>
+                {% endif %}
+              </td>
               <td class="px-3 py-2">{{ "Yes" if q.suggested_answer else "No" }}</td>
               <td class="whitespace-nowrap px-3 py-2">{{ q.next_review_at }}</td>
               <td class="px-3 py-2">{{ q.interval_days }}</td>

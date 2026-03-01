@@ -55,7 +55,12 @@
       <li class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/70">
         <div class="text-[1.02rem] leading-relaxed text-slate-800 dark:text-zinc-100">{{ q.text }}</div>
         <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
-          <span class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">{{ q.topic or "General" }}</span>
+          {% set topic_style = topic_tag_styles.get(q.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+          {% if q.topic %}
+            <a class="rounded-full border px-2 py-0.5 font-semibold no-underline" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};" href="{{ url_for('topics', topic=q.topic) }}">{{ q.topic }}</a>
+          {% else %}
+            <span class="rounded-full border px-2 py-0.5 font-semibold" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};">General</span>
+          {% endif %}
           <span>Added: {{ q.created_at }}</span>
         </div>
       </li>

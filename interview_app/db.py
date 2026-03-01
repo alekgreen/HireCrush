@@ -33,6 +33,7 @@ def init_db() -> None:
             text TEXT NOT NULL,
             text_hash TEXT NOT NULL UNIQUE,
             topic TEXT,
+            topic_color TEXT,
             created_at TEXT NOT NULL,
             last_reviewed_at TEXT,
             next_review_at TEXT NOT NULL,
@@ -69,4 +70,5 @@ def init_db() -> None:
         """
     )
     ensure_column("questions", "suggested_answer", "TEXT")
+    ensure_column("questions", "topic_color", "TEXT")
     db.commit()

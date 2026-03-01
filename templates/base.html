@@ -107,6 +107,7 @@
         <nav class="flex flex-wrap items-center gap-2" aria-label="Primary">
           <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'index' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('index') }}">Dashboard</a>
           <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'generate' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('generate') }}">Generate</a>
+          <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'topics' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('topics') }}">Topics</a>
           <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint in ['review', 'review_submit', 'review_answer', 'review_feedback'] else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('review') }}">Review</a>
           <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'questions' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('questions') }}">All Questions</a>
         </nav>

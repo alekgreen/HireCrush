@@ -30,21 +30,27 @@ def client(tmp_path):
         yield test_client
 
 
-def insert_question(text="What is polymorphism in OOP?", topic="python", suggested_answer=None):
+def insert_question(
+    text="What is polymorphism in OOP?",
+    topic="python",
+    suggested_answer=None,
+    topic_color=None,
+):
     with app_module.app.app_context():
         db = app_module.get_db()
         now = app_module.now_utc()
         db.execute(
             """
             INSERT INTO questions (
-                text, text_hash, topic, created_at, next_review_at,
+                text, text_hash, topic, topic_color, created_at, next_review_at,
                 suggested_answer, repetitions, interval_days, ease_factor
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
             """,
             (
                 text,
                 app_module.question_hash(text),
                 topic,
+                topic_color,
                 app_module.iso(now),
                 app_module.iso(now),
                 suggested_answer,
@@ -69,7 +75,13 @@ def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
         ]
     ]
 
-    def fake_call(_topic, _count, language="English", existing_questions=None):
+    def fake_call(
+        _topic,
+        _count,
+        language="English",
+        existing_questions=None,
+        additional_context=None,
+    ):
         return responses[0]
 
     monkeypatch.setattr(app_module, "call_gemini_for_questions", fake_call)
@@ -86,7 +98,13 @@ def test_add_questions_skips_duplicates_and_short(monkeypatch, client):
 
 
 def test_add_questions_returns_unfilled_when_not_enough_unique(monkeypatch, client):
-    def fake_call(_topic, _count, language="English", existing_questions=None):
+    def fake_call(
+        _topic,
+        _count,
+        language="English",
+        existing_questions=None,
+        additional_context=None,
+    ):
         return ["What is Python?", "What is Python?"]
 
     monkeypatch.setattr(app_module, "call_gemini_for_questions", fake_call)
@@ -121,7 +139,13 @@ def test_apply_review_again_sets_quick_retry(client):
 
 
 def test_generate_route_success_flash(monkeypatch, client):
-    def fake_add_questions(_topic, _count, language="English"):
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
         return 2, 1
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
@@ -261,6 +285,33 @@ def test_review_route_skip_qid_loads_another_due_question(client):
     assert "Question one?" not in body
 
 
+def test_topics_route_lists_topic_cards(client):
+    insert_question("Explain Python decorators.", topic="python", topic_color="emerald")
+    insert_question("What is a SQL index?", topic="sql", topic_color="rose")
+
+    res = client.get("/topics")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Topics" in body
+    assert "python" in body
+    assert "sql" in body
+    assert "Open topic" in body
+
+
+def test_topics_route_detail_filters_by_topic(client):
+    insert_question("Explain Python decorators.", topic="python")
+    insert_question("What is a SQL index?", topic="sql")
+
+    res = client.get("/topics?topic=python")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Viewing questions for this topic." in body
+    assert "Explain Python decorators." in body
+    assert "What is a SQL index?" not in body
+
+
 def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):
     class FakeResponse:
         def __init__(self, status_code, payload=None):
@@ -324,6 +375,7 @@ def test_call_gemini_for_questions_includes_existing_context(monkeypatch):
         2,
         language="English",
         existing_questions=["What is dependency injection?", "Explain CAP theorem?"],
+        additional_context="Senior backend role. Focus on microservices tradeoffs.",
     )
 
     assert out == ["Question A?"]
@@ -331,6 +383,8 @@ def test_call_gemini_for_questions_includes_existing_context(monkeypatch):
     assert "Existing questions already stored in the system" in captured["prompt"]
     assert "What is dependency injection?" in captured["prompt"]
     assert "Explain CAP theorem?" in captured["prompt"]
+    assert "Additional user context to follow when generating questions" in captured["prompt"]
+    assert "Focus on microservices tradeoffs." in captured["prompt"]
     assert "Do not repeat or paraphrase any existing question" in captured["prompt"]
 
 
@@ -341,7 +395,13 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
     response.url = "https://example.com?key=SUPERSECRET"
     http_err = requests.HTTPError("raw error", response=response)
 
-    def fake_add_questions(_topic, _count, language="English"):
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
         raise http_err
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
@@ -360,10 +420,18 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
 def test_generate_route_passes_selected_language(monkeypatch, client):
     captured = {}
 
-    def fake_add_questions(_topic, _count, language="English"):
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
         captured["topic"] = _topic
         captured["count"] = _count
         captured["language"] = language
+        captured["additional_context"] = additional_context
+        captured["topic_color"] = topic_color
         return 1, 0
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
@@ -378,16 +446,25 @@ def test_generate_route_passes_selected_language(monkeypatch, client):
         "topic": "system design",
         "count": 2,
         "language": "Spanish",
+        "additional_context": None,
+        "topic_color": "blue",
     }
 
 
 def test_generate_route_uses_selected_existing_topic(monkeypatch, client):
     captured = {}
 
-    def fake_add_questions(_topic, _count, language="English"):
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
         captured["topic"] = _topic
         captured["count"] = _count
         captured["language"] = language
+        captured["topic_color"] = topic_color
         return 1, 0
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
@@ -400,13 +477,21 @@ def test_generate_route_uses_selected_existing_topic(monkeypatch, client):
     assert response.status_code == 200
     assert captured["topic"] == "python"
     assert captured["count"] == 2
+    assert captured["topic_color"] == "blue"
 
 
 def test_generate_route_prefers_custom_topic_over_selected(monkeypatch, client):
     captured = {}
 
-    def fake_add_questions(_topic, _count, language="English"):
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
         captured["topic"] = _topic
+        captured["topic_color"] = topic_color
         return 1, 0
 
     monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
@@ -423,6 +508,7 @@ def test_generate_route_prefers_custom_topic_over_selected(monkeypatch, client):
 
     assert response.status_code == 200
     assert captured["topic"] == "distributed systems"
+    assert captured["topic_color"] == "blue"
 
 
 def test_generate_route_rejects_invalid_language(client):
@@ -435,6 +521,88 @@ def test_generate_route_rejects_invalid_language(client):
     body = response.data.decode("utf-8")
     assert response.status_code == 200
     assert "Language is invalid." in body
+
+
+def test_generate_route_passes_optional_context_and_selected_color(monkeypatch, client):
+    captured = {}
+
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
+        captured["topic"] = _topic
+        captured["count"] = _count
+        captured["language"] = language
+        captured["additional_context"] = additional_context
+        captured["topic_color"] = topic_color
+        return 1, 0
+
+    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    response = client.post(
+        "/generate",
+        data={
+            "topic": "system design",
+            "count": "2",
+            "language": "en",
+            "additional_context": "Staff-level architecture and tradeoffs.",
+            "topic_color": "emerald",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "topic": "system design",
+        "count": 2,
+        "language": "English",
+        "additional_context": "Staff-level architecture and tradeoffs.",
+        "topic_color": "emerald",
+    }
+
+
+def test_generate_route_rejects_invalid_topic_color(client):
+    response = client.post(
+        "/generate",
+        data={
+            "topic": "python",
+            "count": "2",
+            "language": "en",
+            "topic_color": "not-a-color",
+        },
+        follow_redirects=True,
+    )
+
+    body = response.data.decode("utf-8")
+    assert response.status_code == 200
+    assert "Topic tag color is invalid." in body
+
+
+def test_generate_route_uses_existing_topic_color_when_none_selected(monkeypatch, client):
+    insert_question("What is a queue?", topic="python", topic_color="rose")
+    captured = {}
+
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+    ):
+        captured["topic_color"] = topic_color
+        return 1, 0
+
+    monkeypatch.setattr(app_module, "add_questions", fake_add_questions)
+    response = client.post(
+        "/generate",
+        data={"topic_select": "python", "count": "2", "language": "en"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured["topic_color"] == "rose"
 
 
 def test_review_answer_route_generates_model_answer(monkeypatch, client):

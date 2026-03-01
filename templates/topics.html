@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="space-y-4">
+  <header class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+    <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-400">Knowledge map</p>
+    <h2 class="font-display text-2xl text-slate-900 dark:text-zinc-100">Topics</h2>
+    <p class="mt-2 text-sm text-slate-600 dark:text-zinc-300">
+      {% if selected_topic %}
+        Viewing questions for this topic.
+      {% else %}
+        Browse all topics and open one to inspect its full question set.
+      {% endif %}
+    </p>
+  </header>
+
+  {% if selected_topic %}
+    <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        {% if topic_questions %}
+          {% set topic_style = topic_tag_styles.get(topic_questions[0].topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+        {% else %}
+          {% set topic_style = topic_tag_styles[default_topic_tag_color] %}
+        {% endif %}
+        <span class="rounded-full border px-2 py-0.5 text-xs font-semibold" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};">{{ selected_topic }}</span>
+        <span class="text-sm text-slate-500 dark:text-zinc-400">{{ topic_questions|length }} question(s)</span>
+        <a class="ml-auto rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics') }}">Back to all topics</a>
+      </div>
+
+      {% if topic_questions %}
+        <ul class="space-y-3">
+          {% for q in topic_questions %}
+            <li class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/70">
+              <p class="text-sm text-slate-800 dark:text-zinc-100">{{ q.text }}</p>
+              <p class="mt-2 text-xs text-slate-500 dark:text-zinc-400">Next review: {{ q.next_review_at }}</p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-slate-600 dark:text-zinc-300">No questions found for this topic.</p>
+      {% endif %}
+    </section>
+  {% else %}
+    <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+      {% if topics %}
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {% for topic in topics %}
+            {% set topic_style = topic_tag_styles.get(topic.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+            <article class="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/70">
+              <div class="flex items-start justify-between gap-2">
+                <span class="rounded-full border px-2 py-0.5 text-xs font-semibold" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};">{{ topic.topic }}</span>
+                <span class="text-xs text-slate-500 dark:text-zinc-400">{{ topic.total_questions }} total</span>
+              </div>
+              <p class="mt-2 text-sm text-slate-700 dark:text-zinc-200">Due now: {{ topic.due_questions }}</p>
+              <a class="mt-3 inline-flex rounded-lg border border-brand-500 bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('topics', topic=topic.topic) }}">Open topic</a>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-600 dark:text-zinc-300">No topics available yet. Generate some questions first.</p>
+      {% endif %}
+    </section>
+  {% endif %}
+</section>
+{% endblock %}
