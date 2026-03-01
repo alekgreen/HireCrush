@@ -199,3 +199,45 @@ def test_topics_route_can_edit_and_delete_question(client):
     assert delete_response.status_code == 200
     assert "Question deleted." in delete_body
     assert "No questions found for this selection." in delete_body
+
+
+def test_questions_page_supports_paginated_page_sizes(client):
+    for idx in range(1, 27):
+        insert_question(f"Question number {idx:02d} for all-questions pagination coverage.")
+
+    first_page = client.get("/questions?per_page=25&page=1")
+    first_body = first_page.data.decode("utf-8")
+    assert first_page.status_code == 200
+    assert first_body.count("Edit question #") == 25
+    assert 'value="25" selected' in first_body
+    assert 'value="50"' in first_body
+    assert 'value="100"' in first_body
+    assert ">Next<" in first_body
+
+    second_page = client.get("/questions?per_page=25&page=2")
+    second_body = second_page.data.decode("utf-8")
+    assert second_page.status_code == 200
+    assert second_body.count("Edit question #") == 1
+    assert ">Next<" not in second_body
+    assert ">Previous<" in second_body
+
+
+def test_topics_detail_supports_paginated_page_sizes(client):
+    for idx in range(1, 27):
+        insert_question(f"Question number {idx:02d} for topics pagination coverage.", topic="python")
+
+    first_page = client.get("/topics?topic=python&per_page=25&page=1")
+    first_body = first_page.data.decode("utf-8")
+    assert first_page.status_code == 200
+    assert first_body.count("Edit question #") == 25
+    assert 'value="25" selected' in first_body
+    assert 'value="50"' in first_body
+    assert 'value="100"' in first_body
+    assert ">Next<" in first_body
+
+    second_page = client.get("/topics?topic=python&per_page=25&page=2")
+    second_body = second_page.data.decode("utf-8")
+    assert second_page.status_code == 200
+    assert second_body.count("Edit question #") == 1
+    assert ">Next<" not in second_body
+    assert ">Previous<" in second_body

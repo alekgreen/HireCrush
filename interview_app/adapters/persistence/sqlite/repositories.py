@@ -272,16 +272,19 @@ class SQLiteQuestionRepository(QuestionRepository):
             (limit,),
         ).fetchall()
 
-    def list_questions(self, limit: int = 200):
+    def list_questions(self, limit: int = 200, offset: int = 0):
         db = self._get_db()
+        safe_limit = max(1, int(limit))
+        safe_offset = max(0, int(offset))
         return db.execute(
             """
             SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
             FROM questions
             ORDER BY next_review_at ASC
             LIMIT ?
+            OFFSET ?
             """,
-            (limit,),
+            (safe_limit, safe_offset),
         ).fetchall()
 
     def list_topics_with_stats(self, limit: int = 200):
@@ -357,11 +360,13 @@ class SQLiteQuestionRepository(QuestionRepository):
         params.append(limit)
         return db.execute(query, tuple(params)).fetchall()
 
-    def list_questions_by_topic(self, topic: str, limit: int = 400):
+    def list_questions_by_topic(self, topic: str, limit: int = 400, offset: int = 0):
         db = self._get_db()
         topic_clean = topic.strip()
         if not topic_clean:
             return []
+        safe_limit = max(1, int(limit))
+        safe_offset = max(0, int(offset))
         return db.execute(
             """
             SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
@@ -369,16 +374,25 @@ class SQLiteQuestionRepository(QuestionRepository):
             WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
             ORDER BY next_review_at ASC
             LIMIT ?
+            OFFSET ?
             """,
-            (topic_clean, limit),
+            (topic_clean, safe_limit, safe_offset),
         ).fetchall()
 
-    def list_questions_by_subtopic(self, topic: str, subtopic: str, limit: int = 400):
+    def list_questions_by_subtopic(
+        self,
+        topic: str,
+        subtopic: str,
+        limit: int = 400,
+        offset: int = 0,
+    ):
         db = self._get_db()
         topic_clean = topic.strip()
         subtopic_clean = subtopic.strip()
         if not topic_clean or not subtopic_clean:
             return []
+        safe_limit = max(1, int(limit))
+        safe_offset = max(0, int(offset))
         return db.execute(
             """
             SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
@@ -387,8 +401,9 @@ class SQLiteQuestionRepository(QuestionRepository):
               AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
             ORDER BY next_review_at ASC
             LIMIT ?
+            OFFSET ?
             """,
-            (topic_clean, subtopic_clean, limit),
+            (topic_clean, subtopic_clean, safe_limit, safe_offset),
         ).fetchall()
 
     def _delete_questions_by_ids(self, question_ids: list[int]) -> int:

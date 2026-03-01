@@ -107,6 +107,7 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
     def questions():
         return catalog_handler.questions_page(
             deps=deps_provider().catalog,
+            request_obj=request,
             render_template_fn=render_template,
         )
 

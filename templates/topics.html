@@ -29,6 +29,22 @@
         <span class="text-sm text-slate-500 dark:text-zinc-400">{{ topic_questions|length }} question(s)</span>
         <a class="ml-auto rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics') }}">Back to all topics</a>
       </div>
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <span class="text-xs text-slate-500 dark:text-zinc-400">Page {{ page }}</span>
+        <form class="ml-auto flex items-center gap-2" method="get" action="{{ url_for('topics') }}">
+          <input type="hidden" name="topic" value="{{ selected_topic }}">
+          {% if selected_subtopic %}
+            <input type="hidden" name="subtopic" value="{{ selected_subtopic }}">
+          {% endif %}
+          <label class="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-300" for="topic-questions-per-page">Per page</label>
+          <select id="topic-questions-per-page" name="per_page" class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200" onchange="this.form.submit()">
+            {% for option in per_page_options %}
+              <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="page" value="1">
+        </form>
+      </div>
 
       <div class="mb-4 flex flex-wrap items-center gap-2">
         <button type="button" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" onclick="document.getElementById('edit-topic-selected').showModal()">Edit topic</button>
@@ -83,7 +99,7 @@
 
       {% if selected_subtopic %}
         <div class="mb-4 flex flex-wrap items-center gap-2">
-          <a class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic) }}">Show whole topic</a>
+          <a class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, per_page=per_page) }}">Show whole topic</a>
           <button type="button" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" onclick="document.getElementById('edit-selected-subtopic').showModal()">Edit subtopic</button>
           <dialog id="edit-selected-subtopic" class="w-full max-w-xl rounded-xl border border-slate-300 bg-white p-0 shadow-xl backdrop:bg-slate-900/35 dark:border-zinc-700 dark:bg-zinc-900 dark:backdrop:bg-black/60">
             <div class="border-b border-slate-200 px-4 py-3 dark:border-zinc-700">
@@ -154,8 +170,35 @@
             </li>
           {% endfor %}
         </ul>
+        <div class="mt-4 flex items-center justify-between">
+          {% if has_prev %}
+            {% if selected_subtopic %}
+              <a class="rounded-md border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, subtopic=selected_subtopic, page=page-1, per_page=per_page) }}">Previous</a>
+            {% else %}
+              <a class="rounded-md border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, page=page-1, per_page=per_page) }}">Previous</a>
+            {% endif %}
+          {% else %}
+            <span></span>
+          {% endif %}
+          {% if has_next %}
+            {% if selected_subtopic %}
+              <a class="rounded-md border border-brand-500 bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('topics', topic=selected_topic, subtopic=selected_subtopic, page=page+1, per_page=per_page) }}">Next</a>
+            {% else %}
+              <a class="rounded-md border border-brand-500 bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('topics', topic=selected_topic, page=page+1, per_page=per_page) }}">Next</a>
+            {% endif %}
+          {% endif %}
+        </div>
       {% else %}
         <p class="text-sm text-slate-600 dark:text-zinc-300">No questions found for this selection.</p>
+        {% if has_prev %}
+          <div class="mt-4">
+            {% if selected_subtopic %}
+              <a class="rounded-md border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, subtopic=selected_subtopic, page=page-1, per_page=per_page) }}">Previous page</a>
+            {% else %}
+              <a class="rounded-md border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, page=page-1, per_page=per_page) }}">Previous page</a>
+            {% endif %}
+          </div>
+        {% endif %}
       {% endif %}
     </section>
   {% else %}

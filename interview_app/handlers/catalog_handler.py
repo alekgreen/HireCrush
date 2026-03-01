@@ -4,6 +4,9 @@ from interview_app.constants import TOPIC_TAG_COLOR_BY_CODE
 
 from .deps import CatalogHandlerDeps
 
+PAGINATION_PAGE_SIZES = (25, 50, 100)
+DEFAULT_PER_PAGE = PAGINATION_PAGE_SIZES[0]
+
 
 def _build_topic_subtopics(subtopic_rows) -> dict[str, list]:
     grouped: dict[str, list] = {}
@@ -53,32 +56,79 @@ def _resolve_subtopic_color(*, selected_subtopic: str, rows, subtopic_rows) -> s
     return ""
 
 
-def questions_page(*, deps: CatalogHandlerDeps, render_template_fn):
-    rows = deps.list_questions_fn(limit=200)
-    return render_template_fn("questions.html", questions=rows)
+def _parse_positive_int(value: str, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed <= 0:
+        return default
+    return parsed
+
+
+def _parse_pagination(request_obj) -> tuple[int, int, int]:
+    per_page = _parse_positive_int(request_obj.args.get("per_page", ""), DEFAULT_PER_PAGE)
+    if per_page not in PAGINATION_PAGE_SIZES:
+        per_page = DEFAULT_PER_PAGE
+    page = _parse_positive_int(request_obj.args.get("page", ""), 1)
+    offset = (page - 1) * per_page
+    return page, per_page, offset
+
+
+def _slice_page(rows, *, per_page: int) -> tuple[list, bool]:
+    row_list = list(rows)
+    has_next = len(row_list) > per_page
+    return row_list[:per_page], has_next
+
+
+def questions_page(*, deps: CatalogHandlerDeps, request_obj, render_template_fn):
+    page, per_page, offset = _parse_pagination(request_obj)
+    rows = deps.list_questions_fn(limit=per_page + 1, offset=offset)
+    page_rows, has_next = _slice_page(rows, per_page=per_page)
+    return render_template_fn(
+        "questions.html",
+        questions=page_rows,
+        page=page,
+        per_page=per_page,
+        per_page_options=PAGINATION_PAGE_SIZES,
+        has_prev=page > 1,
+        has_next=has_next,
+    )
 
 
 def topics_page(*, deps: CatalogHandlerDeps, request_obj, render_template_fn):
     selected_topic = request_obj.args.get("topic", "").strip()
     selected_subtopic = request_obj.args.get("subtopic", "").strip()
     if selected_topic:
+        page, per_page, offset = _parse_pagination(request_obj)
         if selected_subtopic:
-            rows = deps.list_questions_by_subtopic_fn(selected_topic, selected_subtopic, limit=400)
+            rows = deps.list_questions_by_subtopic_fn(
+                selected_topic,
+                selected_subtopic,
+                limit=per_page + 1,
+                offset=offset,
+            )
         else:
-            rows = deps.list_questions_by_topic_fn(selected_topic, limit=400)
+            rows = deps.list_questions_by_topic_fn(selected_topic, limit=per_page + 1, offset=offset)
+        page_rows, has_next = _slice_page(rows, per_page=per_page)
         subtopic_rows = deps.list_subtopics_with_stats_fn(topic=selected_topic, limit=400)
         return render_template_fn(
             "topics.html",
             selected_topic=selected_topic,
             selected_subtopic=selected_subtopic,
-            topic_questions=rows,
+            topic_questions=page_rows,
             topic_subtopics=_build_topic_subtopics(subtopic_rows),
-            selected_topic_color=_resolve_topic_color(rows=rows, subtopic_rows=subtopic_rows),
+            selected_topic_color=_resolve_topic_color(rows=page_rows, subtopic_rows=subtopic_rows),
             selected_subtopic_color=_resolve_subtopic_color(
                 selected_subtopic=selected_subtopic,
-                rows=rows,
+                rows=page_rows,
                 subtopic_rows=subtopic_rows,
             ),
+            page=page,
+            per_page=per_page,
+            per_page_options=PAGINATION_PAGE_SIZES,
+            has_prev=page > 1,
+            has_next=has_next,
         )
 
     rows = deps.list_topics_with_stats_fn(limit=200)
