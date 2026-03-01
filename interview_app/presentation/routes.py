@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask import Flask, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from interview_app.handlers import catalog_handler, generation_handler, home_handler, review_handler
 from interview_app.handlers.deps import HandlerDepsBundle
@@ -24,6 +24,20 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
             redirect_fn=redirect,
             url_for_fn=url_for,
             render_template_fn=render_template,
+        )
+
+    def generate_start():
+        return generation_handler.generate_start(
+            deps=deps_provider().generation,
+            request_obj=request,
+            jsonify_fn=jsonify,
+            app_obj=current_app._get_current_object(),
+        )
+
+    def generate_progress(job_id: str):
+        return generation_handler.generate_progress(
+            job_id=job_id,
+            jsonify_fn=jsonify,
         )
 
     def review():
@@ -92,6 +106,13 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
 
     app.add_url_rule("/", endpoint="index", view_func=index, methods=["GET"])
     app.add_url_rule("/generate", endpoint="generate", view_func=generate, methods=["GET", "POST"])
+    app.add_url_rule("/generate/start", endpoint="generate_start", view_func=generate_start, methods=["POST"])
+    app.add_url_rule(
+        "/generate/progress/<string:job_id>",
+        endpoint="generate_progress",
+        view_func=generate_progress,
+        methods=["GET"],
+    )
     app.add_url_rule("/review", endpoint="review", view_func=review, methods=["GET"])
     app.add_url_rule(
         "/review/<int:question_id>",

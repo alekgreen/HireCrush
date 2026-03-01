@@ -1,3 +1,5 @@
+import time
+
 import requests
 
 from interview_app.utils import serialize_topic_subtopic
@@ -279,3 +281,77 @@ def test_generate_route_uses_existing_topic_color_when_none_selected(client, ove
 
     assert response.status_code == 200
     assert captured["topic_color"] == "rose"
+
+
+def test_generate_page_includes_generation_progress_bar(client):
+    response = client.get("/generate")
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert 'id="generation_progress"' in body
+    assert 'id="generation_progress_bar"' in body
+
+
+def test_generate_page_includes_async_generation_urls(client):
+    response = client.get("/generate")
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "data-generate-start-url=" in body
+    assert "data-generate-progress-url-template=" in body
+
+
+def test_generate_start_and_progress_report_done_count(client, override_handler_deps):
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+        progress_callback=None,
+    ):
+        if progress_callback is not None:
+            progress_callback(0, _count)
+            progress_callback(1, _count)
+            progress_callback(2, _count)
+        return 2, 0
+
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
+    start_response = client.post(
+        "/generate/start",
+        data={"topic": "python", "count": "2", "language": "en"},
+    )
+
+    assert start_response.status_code == 202
+    payload = start_response.get_json()
+    assert payload["ok"] is True
+    job_id = payload["job_id"]
+
+    final_status = None
+    for _ in range(40):
+        status_response = client.get(f"/generate/progress/{job_id}")
+        status_payload = status_response.get_json()
+        assert status_response.status_code == 200
+        assert status_payload["ok"] is True
+        final_status = status_payload
+        if status_payload["status"] == "completed":
+            break
+        time.sleep(0.01)
+
+    assert final_status is not None
+    assert final_status["status"] == "completed"
+    assert final_status["inserted"] == 2
+    assert final_status["requested_count"] == 2
+    assert final_status["remaining"] == 0
+
+
+def test_generate_start_rejects_invalid_payload(client):
+    response = client.post(
+        "/generate/start",
+        data={"topic": "python", "count": "abc", "language": "en"},
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 400
+    assert payload["ok"] is False
+    assert payload["error"] == "Count must be an integer."

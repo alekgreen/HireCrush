@@ -8,7 +8,7 @@
     existing saved questions as context to reduce repeats.
   </p>
 
-  <form method="post" class="mt-5 space-y-4">
+  <form method="post" class="mt-5 space-y-4" id="generate_form" data-generate-start-url="{{ generation_start_url }}" data-generate-progress-url-template="{{ generation_progress_url_template }}">
     <div>
       <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="question_type">Question type</label>
       <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="question_type" name="question_type">
@@ -82,13 +82,30 @@
       <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Applied to newly generated questions for this topic.</p>
     </div>
 
-    <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit" id="generate_btn">Generate Unique Questions</button>
+    <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-70" type="submit" id="generate_btn">Generate Unique Questions</button>
+    <div class="hidden rounded-lg border border-brand-200 bg-brand-50/60 p-3 dark:border-teal-900/60 dark:bg-teal-950/30" id="generation_progress" aria-live="polite">
+      <p class="mb-2 text-sm font-semibold text-slate-700 dark:text-zinc-200" id="generation_progress_text">
+        Generating questions...
+      </p>
+      <div class="h-2 overflow-hidden rounded-full bg-brand-100 dark:bg-zinc-800">
+        <div class="h-full rounded-full bg-brand-500 transition-all duration-300 ease-out" id="generation_progress_bar" style="width: 0%"></div>
+      </div>
+      <p class="mt-2 text-xs text-slate-600 dark:text-zinc-300" id="generation_progress_meta">0/0 (0%)</p>
+    </div>
   </form>
   <script>
     (() => {
+      const form = document.getElementById("generate_form");
       const typeSelect = document.getElementById("question_type");
       const hint = document.getElementById("question_type_hint");
       const btn = document.getElementById("generate_btn");
+      const countInput = document.getElementById("count");
+      const progressContainer = document.getElementById("generation_progress");
+      const progressText = document.getElementById("generation_progress_text");
+      const progressBar = document.getElementById("generation_progress_bar");
+      const progressMeta = document.getElementById("generation_progress_meta");
+      const startUrl = form ? (form.dataset.generateStartUrl || "") : "";
+      const progressUrlTemplate = form ? (form.dataset.generateProgressUrlTemplate || "") : "";
       const hints = {
         "theory": "Theory Q&A: open-ended questions answered in text.",
         "code_review": "Code Review: Gemini writes buggy code that the candidate must fix and comment on during review."
@@ -102,6 +119,133 @@
           const v = typeSelect.value;
           hint.textContent = hints[v] || hints["theory"];
           btn.textContent = labels[v] || labels["theory"];
+        });
+      }
+
+      const setProgress = (inserted, requestedCount) => {
+        const safeRequested = Math.max(1, Number(requestedCount) || 1);
+        const safeInserted = Math.max(0, Math.min(Number(inserted) || 0, safeRequested));
+        const pct = Math.round((safeInserted / safeRequested) * 100);
+        progressBar.style.width = `${pct}%`;
+        progressMeta.textContent = `${safeInserted}/${safeRequested} (${pct}%)`;
+      };
+
+      const setIdleState = () => {
+        form.dataset.submitting = "0";
+        btn.disabled = false;
+      };
+
+      const setSubmittingState = () => {
+        form.dataset.submitting = "1";
+        btn.disabled = true;
+      };
+
+      if (form && btn && progressContainer && progressText && progressBar && progressMeta) {
+        form.addEventListener("submit", async (event) => {
+          if (!window.fetch || !startUrl || !progressUrlTemplate) {
+            return;
+          }
+          event.preventDefault();
+          if (form.dataset.submitting === "1") {
+            return;
+          }
+          setSubmittingState();
+          const selectedType = typeSelect ? typeSelect.value : "theory";
+          const count = Math.max(1, parseInt(countInput ? countInput.value : "1", 10) || 1);
+          const noun = selectedType === "code_review" ? "challenge" : "question";
+          const plural = count === 1 ? noun : `${noun}s`;
+          progressContainer.classList.remove("hidden");
+          progressText.textContent = `Generating ${count} ${plural} one by one...`;
+          setProgress(0, count);
+
+          const formData = new FormData(form);
+          let activeJobId = "";
+          let pollingHandle = null;
+          let pollInFlight = false;
+
+          const pollProgress = async () => {
+            if (!activeJobId || pollInFlight) {
+              return;
+            }
+            pollInFlight = true;
+            try {
+              const progressUrl = progressUrlTemplate.replace("__JOB_ID__", encodeURIComponent(activeJobId));
+              const progressResponse = await fetch(progressUrl, {
+                method: "GET",
+                headers: {
+                  "Accept": "application/json"
+                },
+                cache: "no-store"
+              });
+              const progressPayload = await progressResponse.json().catch(() => ({}));
+              if (!progressResponse.ok || !progressPayload.ok) {
+                throw new Error(progressPayload.error || "Failed to fetch generation progress.");
+              }
+
+              const inserted = Number(progressPayload.inserted || 0);
+              const requested = Math.max(1, Number(progressPayload.requested_count || count));
+              setProgress(inserted, requested);
+
+              if (progressPayload.status === "completed") {
+                if (pollingHandle) {
+                  window.clearInterval(pollingHandle);
+                }
+                const remaining = Math.max(0, Number(progressPayload.remaining || 0));
+                if (remaining > 0) {
+                  progressText.textContent = `Done: ${inserted}/${requested} generated. ${remaining} could not be added after uniqueness checks.`;
+                } else {
+                  progressText.textContent = `Done: ${inserted}/${requested} generated.`;
+                }
+                setIdleState();
+                return;
+              }
+
+              if (progressPayload.status === "failed") {
+                if (pollingHandle) {
+                  window.clearInterval(pollingHandle);
+                }
+                progressText.textContent = progressPayload.error || "Generation failed.";
+                setIdleState();
+                return;
+              }
+
+              progressText.textContent = `Generating ${requested} ${plural} one by one... ${inserted}/${requested}`;
+            } catch (err) {
+              if (pollingHandle) {
+                window.clearInterval(pollingHandle);
+              }
+              const message = err instanceof Error ? err.message : "Generation failed.";
+              progressText.textContent = message;
+              setIdleState();
+            } finally {
+              pollInFlight = false;
+            }
+          };
+
+          try {
+            const startResponse = await fetch(startUrl, {
+              method: "POST",
+              headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json"
+              },
+              body: formData
+            });
+            const startPayload = await startResponse.json().catch(() => ({}));
+            if (!startResponse.ok || !startPayload.ok || !startPayload.job_id) {
+              throw new Error(startPayload.error || "Could not start generation.");
+            }
+
+            activeJobId = String(startPayload.job_id);
+            const requested = Math.max(1, Number(startPayload.requested_count || count));
+            setProgress(0, requested);
+            await pollProgress();
+            pollingHandle = window.setInterval(pollProgress, 600);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Generation failed.";
+            progressText.textContent = message;
+            setIdleState();
+          }
         });
       }
     })();

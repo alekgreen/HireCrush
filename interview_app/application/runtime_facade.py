@@ -224,6 +224,7 @@ class RuntimeFacade:
         additional_context: str | None = None,
         topic_color: str = "",
         subtopic: str | None = None,
+        progress_callback=None,
     ) -> tuple[int, int]:
         resolved_topic_color = topic_color or self._default_topic_tag_color_code
         return self._question_service.add_code_review_questions(
@@ -240,6 +241,7 @@ class RuntimeFacade:
             question_hash_fn=self._question_hash_fn,
             now_utc_fn=self._now_utc_fn,
             iso_fn=self._iso_fn,
+            progress_callback=progress_callback,
         )
 
     def add_questions(
@@ -250,6 +252,7 @@ class RuntimeFacade:
         additional_context: str | None = None,
         topic_color: str = "",
         subtopic: str | None = None,
+        progress_callback=None,
     ) -> tuple[int, int]:
         resolved_topic_color = topic_color or self._default_topic_tag_color_code
         return self._question_service.add_questions(
@@ -268,6 +271,7 @@ class RuntimeFacade:
             iso_fn=self._iso_fn,
             auto_generate_answers=bool(self._app.config.get("AUTO_GENERATE_ANSWERS", True)),
             call_gemini_for_answer_fn=self._runtime_callables.get_call_gemini_for_answer(),
+            progress_callback=progress_callback,
         )
 
     def generate_answer_for_question(self, question_id: int) -> str:

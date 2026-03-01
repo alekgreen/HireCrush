@@ -14,6 +14,7 @@ def add_questions(
     iso_fn,
     auto_generate_answers: bool,
     call_gemini_for_answer_fn,
+    progress_callback=None,
 ) -> tuple[int, int]:
     db = get_db_fn()
     existing_hashes = {
@@ -22,15 +23,21 @@ def add_questions(
 
     inserted = 0
     attempts = 0
-    max_attempts = 5
+    # Generate one-by-one to improve per-question quality and context adaptation.
+    max_attempts = max(6, requested_count * 4)
     try:
         generation_context = get_generation_context_questions_fn(topic, subtopic=subtopic, limit=120)
     except TypeError:
         generation_context = get_generation_context_questions_fn(topic, limit=120)
+    if progress_callback is not None:
+        try:
+            progress_callback(inserted, requested_count)
+        except Exception:
+            pass
 
     while inserted < requested_count and attempts < max_attempts:
         attempts += 1
-        needed = min(10, (requested_count - inserted) * 2)
+        needed = 1
         call_kwargs = {
             "language": language,
             "existing_questions": generation_context,
@@ -93,8 +100,18 @@ def add_questions(
             existing_hashes.add(text_hash)
             generation_context.append(text)
             inserted += 1
+            if progress_callback is not None:
+                try:
+                    progress_callback(inserted, requested_count)
+                except Exception:
+                    pass
 
     db.commit()
+    if progress_callback is not None:
+        try:
+            progress_callback(inserted, requested_count)
+        except Exception:
+            pass
     return inserted, requested_count - inserted
 
 
@@ -112,6 +129,7 @@ def add_code_review_questions(
     question_hash_fn,
     now_utc_fn,
     iso_fn,
+    progress_callback=None,
 ) -> tuple[int, int]:
     db = get_db_fn()
     existing_hashes = {
@@ -126,11 +144,17 @@ def add_code_review_questions(
 
     inserted = 0
     attempts = 0
-    max_attempts = 5
+    # Generate one-by-one to improve per-question quality and context adaptation.
+    max_attempts = max(6, requested_count * 4)
+    if progress_callback is not None:
+        try:
+            progress_callback(inserted, requested_count)
+        except Exception:
+            pass
 
     while inserted < requested_count and attempts < max_attempts:
         attempts += 1
-        needed = min(10, (requested_count - inserted) * 2)
+        needed = 1
         call_kwargs = {
             "language": language,
             "existing_questions": existing_texts,
@@ -184,8 +208,18 @@ def add_code_review_questions(
             existing_hashes.add(text_hash)
             existing_texts.append(question_text)
             inserted += 1
+            if progress_callback is not None:
+                try:
+                    progress_callback(inserted, requested_count)
+                except Exception:
+                    pass
 
     db.commit()
+    if progress_callback is not None:
+        try:
+            progress_callback(inserted, requested_count)
+        except Exception:
+            pass
     return inserted, requested_count - inserted
 
 
