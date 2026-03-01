@@ -1,36 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card">
-  <h2>All Questions</h2>
+<section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6">
+  <h2 class="mb-4 font-display text-2xl text-slate-900">All Questions</h2>
   {% if questions %}
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Question</th>
-          <th>Topic</th>
-          <th>Has Answer</th>
-          <th>Next Review</th>
-          <th>Interval (days)</th>
-          <th>Repetitions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for q in questions %}
+    <div class="overflow-x-auto rounded-xl border border-slate-200">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
           <tr>
-            <td>{{ q.id }}</td>
-            <td>{{ q.text }}</td>
-            <td>{{ q.topic or "General" }}</td>
-            <td>{{ "Yes" if q.suggested_answer else "No" }}</td>
-            <td>{{ q.next_review_at }}</td>
-            <td>{{ q.interval_days }}</td>
-            <td>{{ q.repetitions }}</td>
+            <th class="px-3 py-2 text-left">ID</th>
+            <th class="px-3 py-2 text-left">Question</th>
+            <th class="px-3 py-2 text-left">Topic</th>
+            <th class="px-3 py-2 text-left">Has Answer</th>
+            <th class="px-3 py-2 text-left">Next Review</th>
+            <th class="px-3 py-2 text-left">Interval (days)</th>
+            <th class="px-3 py-2 text-left">Repetitions</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
+          {% for q in questions %}
+            <tr class="align-top">
+              <td class="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{{ q.id }}</td>
+              <td class="px-3 py-2">{{ q.text }}</td>
+              <td class="px-3 py-2">{{ q.topic or "General" }}</td>
+              <td class="px-3 py-2">{{ "Yes" if q.suggested_answer else "No" }}</td>
+              <td class="whitespace-nowrap px-3 py-2">{{ q.next_review_at }}</td>
+              <td class="px-3 py-2">{{ q.interval_days }}</td>
+              <td class="px-3 py-2">{{ q.repetitions }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p>No questions saved yet.</p>
+    <p class="text-slate-600">No questions saved yet.</p>
   {% endif %}
 </section>
 {% endblock %}

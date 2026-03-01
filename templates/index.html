@@ -1,28 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card stats">
-  <h2>Dashboard</h2>
-  <p><strong>Total questions:</strong> {{ stats.total }}</p>
-  <p><strong>Due now:</strong> {{ stats.due }}</p>
-  <div class="actions">
-    <a class="btn" href="{{ url_for('generate') }}">Generate Questions</a>
-    <a class="btn primary" href="{{ url_for('review') }}">Start Review</a>
+<section class="mb-4 rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6">
+  <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Your practice command center</p>
+  <h2 class="font-display text-2xl text-slate-900">Dashboard</h2>
+
+  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+    <article class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <p class="text-sm text-slate-600">Total questions</p>
+      <p class="mt-1 text-3xl font-bold text-slate-900">{{ stats.total }}</p>
+    </article>
+    <article class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <p class="text-sm text-amber-700">Due now</p>
+      <p class="mt-1 text-3xl font-bold text-amber-800">{{ stats.due }}</p>
+    </article>
+  </div>
+
+  <div class="mt-4 flex flex-wrap gap-2">
+    <a class="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-200" href="{{ url_for('generate') }}">Generate Questions</a>
+    <a class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('review') }}">Start Review</a>
   </div>
 </section>
 
-<section class="card">
-  <h2>Recent Questions</h2>
+<section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6">
+  <h2 class="mb-3 font-display text-2xl text-slate-900">Recent Questions</h2>
   {% if recent %}
-    <ul>
+    <ul class="space-y-3">
       {% for q in recent %}
-      <li>
-        <div class="question-text">{{ q.text }}</div>
-        <div class="meta">Topic: {{ q.topic or "General" }} | Added: {{ q.created_at }}</div>
+      <li class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div class="text-[1.02rem] leading-relaxed text-slate-800">{{ q.text }}</div>
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">{{ q.topic or "General" }}</span>
+          <span>Added: {{ q.created_at }}</span>
+        </div>
       </li>
       {% endfor %}
     </ul>
   {% else %}
-    <p>No questions yet. Generate some first.</p>
+    <p class="text-slate-600">No questions yet. Generate some first.</p>
   {% endif %}
 </section>
 {% endblock %}

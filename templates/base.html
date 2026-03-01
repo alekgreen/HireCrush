@@ -4,24 +4,66 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Interview Repetition</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
+            display: ["Fraunces", "ui-serif", "serif"]
+          },
+          colors: {
+            paper: "#f6f7f9",
+            ink: "#0f172a",
+            mist: "#d9e0ea",
+            brand: {
+              50: "#e9f2ff",
+              500: "#2f5fd6",
+              600: "#244fb7"
+            }
+          },
+          boxShadow: {
+            soft: "0 14px 42px -26px rgba(15, 23, 42, 0.45)"
+          }
+        }
+      }
+    };
+  </script>
 </head>
-<body>
-  <header class="header">
-    <h1><a href="{{ url_for('index') }}">Interview Repetition</a></h1>
-    <nav>
-      <a href="{{ url_for('generate') }}">Generate</a>
-      <a href="{{ url_for('review') }}">Review</a>
-      <a href="{{ url_for('questions') }}">All Questions</a>
-    </nav>
+<body class="min-h-screen bg-gradient-to-br from-slate-100 via-paper to-blue-50 text-ink">
+  <header class="sticky top-0 z-20 border-b border-white/60 bg-white/80 backdrop-blur">
+    <div class="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <a class="flex flex-col no-underline" href="{{ url_for('index') }}">
+        <span class="font-display text-xl leading-tight text-slate-900">Interview Repetition</span>
+        <span class="text-xs font-medium tracking-wide text-slate-500">Spaced practice for technical interviews</span>
+      </a>
+      <nav class="flex flex-wrap items-center gap-2" aria-label="Primary">
+        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'index' else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'generate' else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('generate') }}">Generate</a>
+        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint in ['review', 'review_submit', 'review_answer', 'review_feedback'] else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('review') }}">Review</a>
+        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'questions' else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('questions') }}">All Questions</a>
+      </nav>
+    </div>
   </header>
 
-  <main class="container">
+  <main class="mx-auto w-full max-w-6xl px-4 py-5 md:py-6">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="messages">
+        <div class="mb-4 space-y-2">
           {% for category, message in messages %}
-            <div class="message {{ category }}">{{ message }}</div>
+            <div class="rounded-xl border px-4 py-3 text-sm shadow-sm
+              {% if category == 'success' %}
+                border-emerald-200 bg-emerald-50 text-emerald-800
+              {% elif category == 'error' %}
+                border-rose-200 bg-rose-50 text-rose-800
+              {% else %}
+                border-blue-200 bg-blue-50 text-blue-800
+              {% endif %}
+            ">{{ message }}</div>
           {% endfor %}
         </div>
       {% endif %}

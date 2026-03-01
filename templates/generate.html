@@ -1,15 +1,44 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card">
-  <h2>Generate New Questions</h2>
-  <form method="post" class="form">
-    <label for="topic">Topic / role</label>
-    <input id="topic" name="topic" type="text" placeholder="e.g. Python backend, system design, data structures" required>
+<section class="mx-auto max-w-3xl rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6">
+  <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Create a focused drill set</p>
+  <h2 class="font-display text-2xl text-slate-900">Generate New Questions</h2>
+  <p class="mt-2 text-sm text-slate-600">
+    Choose an existing topic or create a new one, then set quantity. The app uses
+    existing saved questions as context to reduce repeats.
+  </p>
 
-    <label for="count">How many</label>
-    <input id="count" name="count" type="number" min="1" max="20" value="5" required>
+  <form method="post" class="mt-5 space-y-4">
+    <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700" for="topic_select">Existing topic</label>
+      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" id="topic_select" name="topic_select">
+        <option value="">Select a saved topic</option>
+        {% for topic_name in available_topics %}
+          <option value="{{ topic_name }}">{{ topic_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
-    <button class="btn primary" type="submit">Generate Unique Questions</button>
+    <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700" for="topic_new">Or create a new topic</label>
+      <input class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" id="topic_new" name="topic_new" type="text" placeholder="e.g. Python backend, system design, data structures">
+    </div>
+
+    <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700" for="language">Language</label>
+      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" id="language" name="language" required>
+        {% for code, label in generation_languages %}
+          <option value="{{ code }}" {% if code == selected_language %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700" for="count">How many</label>
+      <input class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" id="count" name="count" type="number" min="1" max="20" value="5" required>
+    </div>
+
+    <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Generate Unique Questions</button>
   </form>
 </section>
 {% endblock %}
