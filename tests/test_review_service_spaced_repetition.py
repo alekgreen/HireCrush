@@ -203,3 +203,38 @@ def test_apply_review_missing_question_is_noop(client):
         history_count = get_db().execute("SELECT COUNT(*) AS c FROM review_history").fetchone()["c"]
 
     assert history_count == 0
+
+
+def test_get_review_reappearance_labels_formats_days_and_weeks(client):
+    question_id = insert_question("How do read replicas work?")
+    _set_scheduler_state(question_id, repetitions=2, interval_days=6, ease_factor=2.5)
+    row = _fetch_question(question_id)
+
+    labels = review_service.get_review_reappearance_labels(
+        question=row,
+        now_utc_fn=lambda: datetime(2025, 1, 15, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert labels == {
+        "again": "10 min",
+        "hard": "2 weeks",
+        "good": "15 days",
+        "easy": "3 weeks",
+    }
+
+
+def test_get_review_reappearance_labels_for_new_card(client):
+    question_id = insert_question("Explain consistent hashing.")
+    row = _fetch_question(question_id)
+
+    labels = review_service.get_review_reappearance_labels(
+        question=row,
+        now_utc_fn=lambda: datetime(2025, 1, 15, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert labels == {
+        "again": "10 min",
+        "hard": "1 day",
+        "good": "1 day",
+        "easy": "2 days",
+    }

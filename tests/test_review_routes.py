@@ -47,6 +47,33 @@ def test_review_route_filters_due_question_by_selected_topics(client):
     assert "What is a SQL index?" not in body
 
 
+def test_review_route_shows_reappearance_hints_for_grade_buttons(client, override_handler_deps):
+    question_id = insert_question("Explain logical replication.")
+    override_handler_deps(
+        review={
+            "get_review_reappearance_labels_fn": lambda _question: {
+                "again": "10 min",
+                "hard": "1 day",
+                "good": "6 days",
+                "easy": "2 weeks",
+            }
+        }
+    )
+
+    res = client.get(f"/review?qid={question_id}")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Again" in body
+    assert "Hard" in body
+    assert "Good" in body
+    assert "Easy" in body
+    assert "10 min" in body
+    assert "1 day" in body
+    assert "6 days" in body
+    assert "2 weeks" in body
+
+
 def test_review_route_passes_randomize_and_topics_to_selector(client, override_handler_deps):
     captured = {}
 

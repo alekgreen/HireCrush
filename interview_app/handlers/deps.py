@@ -32,6 +32,7 @@ class ReviewHandlerDeps:
     get_due_question_fn: Callable[..., Any]
     get_next_upcoming_fn: Callable[..., Any]
     get_latest_feedback_fn: Callable[[int], Any]
+    get_review_reappearance_labels_fn: Callable[[Any], dict[str, str]]
     apply_review_fn: Callable[[int, int], None]
     normalize_topic_filters_fn: Callable[[list[str]], list[str]]
     is_randomized_review_fn: Callable[[str], bool]

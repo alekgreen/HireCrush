@@ -27,10 +27,13 @@ def review_page(*, deps: ReviewHandlerDeps, request_obj, render_template_fn):
     stats = deps.get_stats_fn()
     upcoming = None
     latest_feedback = None
+    review_reappearance_labels: dict[str, str] = {}
     if question is None:
         upcoming = deps.get_next_upcoming_fn(topics=selected_topics)
-    elif show_feedback:
-        latest_feedback = deps.get_latest_feedback_fn(question["id"])
+    else:
+        review_reappearance_labels = deps.get_review_reappearance_labels_fn(question)
+        if show_feedback:
+            latest_feedback = deps.get_latest_feedback_fn(question["id"])
 
     return render_template_fn(
         "review.html",
@@ -38,6 +41,7 @@ def review_page(*, deps: ReviewHandlerDeps, request_obj, render_template_fn):
         stats=stats,
         upcoming=upcoming,
         latest_feedback=latest_feedback,
+        review_reappearance_labels=review_reappearance_labels,
         selected_topics=selected_topics,
         randomize=randomize,
     )

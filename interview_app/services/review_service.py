@@ -2,6 +2,76 @@ from datetime import timedelta
 from urllib.parse import parse_qsl
 
 
+def _compute_review_outcome(
+    *,
+    rating: int,
+    repetitions: int,
+    interval_days: int,
+    ease_factor: float,
+    now,
+) -> dict:
+    if rating <= 2:
+        return {
+            "repetitions": 0,
+            "interval_days": 0,
+            "ease_factor": ease_factor,
+            "next_due": now + timedelta(minutes=10),
+        }
+
+    new_ease_factor = max(
+        1.3,
+        ease_factor + (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)),
+    )
+    if repetitions == 0:
+        new_interval_days = 1
+    elif repetitions == 1:
+        new_interval_days = 6
+    else:
+        new_interval_days = max(1, round(interval_days * new_ease_factor))
+    if rating == 5:
+        new_interval_days = max(new_interval_days + 1, round(new_interval_days * 1.3))
+
+    return {
+        "repetitions": repetitions + 1,
+        "interval_days": new_interval_days,
+        "ease_factor": new_ease_factor,
+        "next_due": now + timedelta(days=new_interval_days),
+    }
+
+
+def _format_reappearance_label(*, rating: int, interval_days: int) -> str:
+    if rating <= 2:
+        return "10 min"
+    if interval_days == 1:
+        return "1 day"
+    if interval_days >= 7 and interval_days % 7 == 0:
+        weeks = interval_days // 7
+        return f"{weeks} week" if weeks == 1 else f"{weeks} weeks"
+    return f"{interval_days} days"
+
+
+def get_review_reappearance_labels(question, now_utc_fn) -> dict[str, str]:
+    now = now_utc_fn()
+    current_repetitions = int(question["repetitions"])
+    current_interval_days = int(question["interval_days"])
+    current_ease_factor = float(question["ease_factor"])
+
+    labels: dict[str, str] = {}
+    for grade, rating in (("again", 2), ("hard", 3), ("good", 4), ("easy", 5)):
+        outcome = _compute_review_outcome(
+            rating=rating,
+            repetitions=current_repetitions,
+            interval_days=current_interval_days,
+            ease_factor=current_ease_factor,
+            now=now,
+        )
+        labels[grade] = _format_reappearance_label(
+            rating=rating,
+            interval_days=int(outcome["interval_days"]),
+        )
+    return labels
+
+
 def apply_review(
     question_id: int,
     rating: int,
@@ -15,28 +85,23 @@ def apply_review(
         return
 
     now = now_utc_fn()
-    ef = float(question["ease_factor"])
-    reps = int(question["repetitions"])
-    interval = int(question["interval_days"])
-    old_ef = ef
-    old_interval = interval
+    current_ef = float(question["ease_factor"])
+    current_reps = int(question["repetitions"])
+    current_interval = int(question["interval_days"])
+    old_ef = current_ef
+    old_interval = current_interval
 
-    if rating <= 2:
-        reps = 0
-        interval = 0
-        next_due = now + timedelta(minutes=10)
-    else:
-        ef = max(1.3, ef + (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)))
-        if reps == 0:
-            interval = 1
-        elif reps == 1:
-            interval = 6
-        else:
-            interval = max(1, round(interval * ef))
-        if rating == 5:
-            interval = max(interval + 1, round(interval * 1.3))
-        reps += 1
-        next_due = now + timedelta(days=interval)
+    outcome = _compute_review_outcome(
+        rating=rating,
+        repetitions=current_reps,
+        interval_days=current_interval,
+        ease_factor=current_ef,
+        now=now,
+    )
+    reps = int(outcome["repetitions"])
+    interval = int(outcome["interval_days"])
+    ef = float(outcome["ease_factor"])
+    next_due = outcome["next_due"]
 
     db.execute(
         """

@@ -32,6 +32,7 @@ class ReviewFlowInputs:
     get_due_question_fn: Callable[..., Any]
     get_next_upcoming_fn: Callable[..., Any]
     get_latest_feedback_fn: Callable[[int], Any]
+    get_review_reappearance_labels_fn: Callable[[Any], dict[str, str]]
     get_stats_fn: Callable[[], dict]
     apply_review_fn: Callable[[int, int], None]
     normalize_topic_filters_fn: Callable[[list[str]], list[str]]
@@ -100,6 +101,7 @@ def build_handler_deps_bundle(
             get_due_question_fn=inputs.review.get_due_question_fn,
             get_next_upcoming_fn=inputs.review.get_next_upcoming_fn,
             get_latest_feedback_fn=inputs.review.get_latest_feedback_fn,
+            get_review_reappearance_labels_fn=inputs.review.get_review_reappearance_labels_fn,
             apply_review_fn=inputs.review.apply_review_fn,
             normalize_topic_filters_fn=inputs.review.normalize_topic_filters_fn,
             is_randomized_review_fn=inputs.review.is_randomized_review_fn,
@@ -140,6 +142,7 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 get_due_question_fn=namespace.get_due_question,
                 get_next_upcoming_fn=namespace.get_next_upcoming,
                 get_latest_feedback_fn=namespace.get_latest_feedback,
+                get_review_reappearance_labels_fn=namespace.get_review_reappearance_labels,
                 get_stats_fn=namespace.get_stats,
                 apply_review_fn=namespace.apply_review,
                 normalize_topic_filters_fn=namespace.normalize_topic_filters,

@@ -160,6 +160,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 get_due_question_fn=question_repository.get_due_question,
                 get_next_upcoming_fn=question_repository.get_next_upcoming,
                 get_latest_feedback_fn=feedback_repository.get_latest_feedback,
+                get_review_reappearance_labels_fn=runtime.get_review_reappearance_labels,
                 get_stats_fn=question_repository.get_stats,
                 apply_review_fn=runtime.apply_review,
                 normalize_topic_filters_fn=runtime.normalize_topic_filters,

@@ -221,6 +221,12 @@ class RuntimeFacade:
             iso_fn=self._iso_fn,
         )
 
+    def get_review_reappearance_labels(self, question) -> dict[str, str]:
+        return self._review_service.get_review_reappearance_labels(
+            question=question,
+            now_utc_fn=self._now_utc_fn,
+        )
+
     def normalize_topic_filters(self, raw_values: list[str]) -> list[str]:
         return self._review_service.normalize_topic_filters(raw_values)
 
