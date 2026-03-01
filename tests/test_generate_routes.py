@@ -299,6 +299,131 @@ def test_generate_page_includes_async_generation_urls(client):
     assert response.status_code == 200
     assert "data-generate-start-url=" in body
     assert "data-generate-progress-url-template=" in body
+    assert "data-generate-scope-preview-url=" in body
+
+
+def test_generate_page_prefills_topic_and_subtopic_from_query(client):
+    insert_question("Explain event loops.", topic="Python", subtopic="AsyncIO")
+    response = client.get("/generate?topic=python&subtopic=asyncio")
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert 'id="topic"' in body
+    assert 'name="topic"' in body
+    assert 'value="Python"' in body
+    assert 'id="subtopic"' in body
+    assert 'name="subtopic"' in body
+    assert 'value="AsyncIO"' in body
+
+
+def test_generate_route_accepts_unified_topic_and_subtopic_inputs(client, override_handler_deps):
+    captured = {}
+
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+        subtopic=None,
+    ):
+        captured["topic"] = _topic
+        captured["subtopic"] = subtopic
+        captured["count"] = _count
+        return 1, 0
+
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
+    response = client.post(
+        "/generate",
+        data={
+            "topic": "Python",
+            "subtopic": "AsyncIO",
+            "count": "2",
+            "language": "en",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured["topic"] == "Python"
+    assert captured["subtopic"] == "AsyncIO"
+    assert captured["count"] == 2
+
+
+def test_generate_route_infers_topic_from_unified_subtopic(client, override_handler_deps):
+    insert_question("Describe k8s services.", topic="DevOps", subtopic="Kubernetes")
+    captured = {}
+
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+        subtopic=None,
+    ):
+        captured["topic"] = _topic
+        captured["subtopic"] = subtopic
+        return 1, 0
+
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
+    response = client.post(
+        "/generate",
+        data={
+            "subtopic": "Kubernetes",
+            "count": "2",
+            "language": "en",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured["topic"] == "DevOps"
+    assert captured["subtopic"] == "Kubernetes"
+
+
+def test_generate_scope_preview_returns_scope_counts(client):
+    insert_question("Explain event loops.", topic="Python", subtopic="AsyncIO", topic_color="amber")
+    insert_question("How does await work?", topic="Python", subtopic="AsyncIO")
+    insert_question("What is gradual typing?", topic="Python", subtopic="Typing")
+
+    scope_subtopic = serialize_topic_subtopic("Python", "AsyncIO")
+    response = client.get(f"/generate/scope-preview?topic=python&subtopic={scope_subtopic}")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["topic"] == "Python"
+    assert payload["subtopic"] == "AsyncIO"
+    assert payload["topic_exists"] is True
+    assert payload["subtopic_exists"] is True
+    assert payload["topic_total_questions"] == 3
+    assert payload["subtopic_total_questions"] == 2
+    assert payload["recommended_count"] == 4
+    assert payload["resolved_topic_color"] == "amber"
+    assert payload["warnings"] == []
+
+
+def test_generate_scope_preview_infers_topic_from_plain_subtopic(client):
+    insert_question("Describe k8s services.", topic="DevOps", subtopic="Kubernetes")
+    response = client.get("/generate/scope-preview?subtopic=Kubernetes")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["topic"] == "DevOps"
+    assert payload["subtopic"] == "Kubernetes"
+    assert "Topic was inferred from the selected subtopic." in payload["warnings"]
+
+
+def test_generate_scope_preview_rejects_mismatched_topic_and_subtopic(client):
+    mismatched = serialize_topic_subtopic("DevOps", "Kubernetes")
+    response = client.get(f"/generate/scope-preview?topic=python&subtopic={mismatched}")
+    payload = response.get_json()
+
+    assert response.status_code == 400
+    assert payload["ok"] is False
+    assert payload["error"] == "Selected subtopic does not belong to the chosen topic."
 
 
 def test_generate_start_and_progress_report_done_count(client, override_handler_deps):

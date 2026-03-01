@@ -14,6 +14,14 @@ _GENERATION_JOB_TTL_SECONDS = 15 * 60
 _GENERATION_MAX_TRACKED_JOBS = 300
 
 
+def _normalize_text(value) -> str:
+    return str(value).strip()
+
+
+def _normalize_key(value) -> str:
+    return _normalize_text(value).lower()
+
+
 def _build_available_subtopics(topic_subtopic_rows) -> list[dict]:
     options: list[dict] = []
     seen: set[str] = set()
@@ -36,15 +44,130 @@ def _build_available_subtopics(topic_subtopic_rows) -> list[dict]:
     return options
 
 
+def _resolve_generate_prefill(
+    *,
+    request_obj,
+    available_topics: list[str],
+    available_subtopics: list[dict],
+) -> dict:
+    raw_topic = _normalize_text(request_obj.args.get("topic", ""))
+    raw_subtopic = _normalize_text(request_obj.args.get("subtopic", ""))
+    if not raw_topic and not raw_subtopic:
+        return {
+            "topic_value": "",
+            "subtopic_value": "",
+        }
+
+    topic_by_key = {_normalize_key(topic): topic for topic in available_topics}
+    topic_value = topic_by_key.get(_normalize_key(raw_topic), raw_topic)
+    subtopic_value = raw_subtopic
+
+    parsed_pair = parse_topic_subtopic(raw_subtopic) if raw_subtopic else None
+    if parsed_pair is not None:
+        pair_topic, pair_subtopic = parsed_pair
+        if not topic_value or _normalize_key(topic_value) == _normalize_key(pair_topic):
+            topic_value = topic_by_key.get(_normalize_key(pair_topic), pair_topic)
+            subtopic_value = pair_subtopic
+    elif raw_subtopic and topic_value:
+        pair_match = next(
+            (
+                item
+                for item in available_subtopics
+                if _normalize_key(item["topic"]) == _normalize_key(topic_value)
+                and _normalize_key(item["subtopic"]) == _normalize_key(raw_subtopic)
+            ),
+            None,
+        )
+        if pair_match is not None:
+            topic_value = pair_match["topic"]
+            subtopic_value = pair_match["subtopic"]
+    elif raw_subtopic and not topic_value:
+        subtopic_matches = [
+            item
+            for item in available_subtopics
+            if _normalize_key(item["subtopic"]) == _normalize_key(raw_subtopic)
+        ]
+        if len(subtopic_matches) == 1:
+            topic_value = subtopic_matches[0]["topic"]
+            subtopic_value = subtopic_matches[0]["subtopic"]
+
+    return {"topic_value": topic_value, "subtopic_value": subtopic_value}
+
+
+def _resolve_scope_selection(*, topic_raw: str, subtopic_raw: str) -> tuple[dict | None, str | None]:
+    topic = _normalize_text(topic_raw)
+    subtopic_value = _normalize_text(subtopic_raw)
+    parsed_subtopic_pair = parse_topic_subtopic(subtopic_value) if subtopic_value else None
+    topic_inferred = False
+
+    if parsed_subtopic_pair is not None:
+        subtopic_topic, subtopic_name = parsed_subtopic_pair
+        if topic and _normalize_key(topic) != _normalize_key(subtopic_topic):
+            return None, "Selected subtopic does not belong to the chosen topic."
+        if not topic:
+            topic = subtopic_topic
+            topic_inferred = True
+        subtopic = subtopic_name
+    else:
+        subtopic = subtopic_value
+
+    return {
+        "topic": topic,
+        "subtopic": subtopic,
+        "topic_inferred": topic_inferred,
+    }, None
+
+
+def _suggest_generation_count(*, topic_total: int, subtopic_total: int, has_subtopic_scope: bool) -> int:
+    if has_subtopic_scope:
+        scoped_total = max(0, int(subtopic_total))
+    else:
+        scoped_total = max(0, int(topic_total))
+    if scoped_total <= 0:
+        return 5
+    if scoped_total < 4:
+        return 4
+    if scoped_total < 10:
+        return 3
+    return 2
+
+
+def _infer_topic_for_subtopic(*, deps: GenerationHandlerDeps, subtopic: str) -> tuple[str | None, bool]:
+    subtopic_key = _normalize_key(subtopic)
+    if not subtopic_key:
+        return None, False
+
+    rows = deps.list_topic_subtopics_fn(limit=1000)
+    topics = {
+        _normalize_text(row["topic"])
+        for row in rows
+        if _normalize_key(row["subtopic"]) == subtopic_key and _normalize_text(row["topic"])
+    }
+    if len(topics) == 1:
+        return next(iter(topics)), False
+    if len(topics) > 1:
+        return None, True
+    return None, False
+
+
 def _parse_generation_request(*, deps: GenerationHandlerDeps, request_obj) -> tuple[dict | None, str | None]:
     selected_topic = request_obj.form.get("topic_select", "").strip()
     custom_topic = request_obj.form.get("topic_new", "").strip()
     topic_legacy = request_obj.form.get("topic", "").strip()
-    topic = custom_topic or selected_topic or topic_legacy
+    topic = topic_legacy or custom_topic or selected_topic
     selected_subtopic_raw = request_obj.form.get("subtopic_select", "").strip()
+    subtopic_legacy_raw = request_obj.form.get("subtopic", "").strip()
     custom_subtopic = request_obj.form.get("subtopic_new", "").strip()
-    subtopic = custom_subtopic or ""
-    selected_subtopic_pair = parse_topic_subtopic(selected_subtopic_raw) if selected_subtopic_raw else None
+    subtopic = subtopic_legacy_raw or custom_subtopic or ""
+
+    selected_subtopic_pair = None
+    if selected_subtopic_raw:
+        selected_subtopic_pair = parse_topic_subtopic(selected_subtopic_raw)
+    elif subtopic:
+        parsed_legacy_pair = parse_topic_subtopic(subtopic)
+        if parsed_legacy_pair is not None:
+            selected_subtopic_pair = parsed_legacy_pair
+            subtopic = ""
 
     if selected_subtopic_raw and selected_subtopic_pair is None:
         return None, "Subtopic selection is invalid."
@@ -54,6 +177,12 @@ def _parse_generation_request(*, deps: GenerationHandlerDeps, request_obj) -> tu
         return None, "Selected subtopic does not belong to the chosen topic."
     if selected_subtopic_pair is not None and not subtopic:
         subtopic = selected_subtopic_pair[1]
+    if subtopic and not topic:
+        inferred_topic, ambiguous = _infer_topic_for_subtopic(deps=deps, subtopic=subtopic)
+        if ambiguous:
+            return None, "Subtopic exists in multiple topics. Please specify a topic."
+        if inferred_topic:
+            topic = inferred_topic
 
     additional_context = request_obj.form.get("additional_context", "").strip()
     topic_color_raw = request_obj.form.get("topic_color", "").strip().lower()
@@ -329,6 +458,107 @@ def generate_progress(
     )
 
 
+def generate_scope_preview(
+    *,
+    deps: GenerationHandlerDeps,
+    request_obj,
+    jsonify_fn,
+):
+    selection, error = _resolve_scope_selection(
+        topic_raw=request_obj.args.get("topic", ""),
+        subtopic_raw=request_obj.args.get("subtopic", ""),
+    )
+    if error:
+        return jsonify_fn({"ok": False, "error": error}), 400
+
+    topic = selection["topic"]
+    subtopic = selection["subtopic"]
+    inferred_from_plain_subtopic = False
+    if not topic and subtopic:
+        subtopic_rows = deps.list_subtopics_with_stats_fn(limit=500)
+        matches = [
+            row
+            for row in subtopic_rows
+            if _normalize_key(row["subtopic"]) == _normalize_key(subtopic) and _normalize_text(row["topic"])
+        ]
+        unique_topics = {_normalize_text(row["topic"]) for row in matches}
+        if len(unique_topics) == 1:
+            topic = next(iter(unique_topics))
+            inferred_from_plain_subtopic = True
+
+    topic_exists = False
+    topic_total = 0
+    due_total = 0
+    canonical_topic = topic
+
+    if topic:
+        topic_rows = deps.list_topics_with_stats_fn(limit=500)
+        topic_map = {
+            _normalize_key(row["topic"]): row
+            for row in topic_rows
+            if _normalize_text(row["topic"])
+        }
+        topic_row = topic_map.get(_normalize_key(topic))
+        if topic_row is not None:
+            topic_exists = True
+            canonical_topic = _normalize_text(topic_row["topic"])
+            topic_total = int(topic_row["total_questions"])
+            due_total = int(topic_row["due_questions"])
+
+    subtopic_exists = False
+    subtopic_total = 0
+    canonical_subtopic = subtopic
+    if topic and subtopic:
+        subtopic_rows = deps.list_subtopics_with_stats_fn(topic=canonical_topic, limit=500)
+        subtopic_map = {
+            _normalize_key(row["subtopic"]): row
+            for row in subtopic_rows
+            if _normalize_text(row["subtopic"])
+        }
+        subtopic_row = subtopic_map.get(_normalize_key(subtopic))
+        if subtopic_row is not None:
+            subtopic_exists = True
+            canonical_subtopic = _normalize_text(subtopic_row["subtopic"])
+            subtopic_total = int(subtopic_row["total_questions"])
+
+    warnings: list[str] = []
+    if canonical_subtopic and not canonical_topic:
+        warnings.append("Topic is required when using a subtopic.")
+    if (selection["topic_inferred"] or inferred_from_plain_subtopic) and canonical_topic:
+        warnings.append("Topic was inferred from the selected subtopic.")
+    if canonical_topic and not topic_exists:
+        warnings.append("No saved questions yet for this topic.")
+    if canonical_topic and canonical_subtopic and not subtopic_exists:
+        warnings.append("No saved questions yet for this subtopic in the selected topic.")
+
+    recommended_count = _suggest_generation_count(
+        topic_total=topic_total,
+        subtopic_total=subtopic_total,
+        has_subtopic_scope=bool(canonical_subtopic),
+    )
+    resolved_color = (
+        deps.get_recent_topic_color_fn(canonical_topic)
+        if canonical_topic
+        else deps.default_topic_tag_color_code
+    ) or deps.default_topic_tag_color_code
+
+    return jsonify_fn(
+        {
+            "ok": True,
+            "topic": canonical_topic,
+            "subtopic": canonical_subtopic,
+            "topic_exists": topic_exists,
+            "subtopic_exists": subtopic_exists,
+            "topic_total_questions": topic_total,
+            "topic_due_questions": due_total,
+            "subtopic_total_questions": subtopic_total,
+            "recommended_count": recommended_count,
+            "resolved_topic_color": resolved_color,
+            "warnings": warnings,
+        }
+    )
+
+
 def generate_page(
     *,
     deps: GenerationHandlerDeps,
@@ -340,6 +570,11 @@ def generate_page(
 ):
     available_topics = deps.get_existing_topics_fn()
     available_subtopics = _build_available_subtopics(deps.list_topic_subtopics_fn(limit=500))
+    prefill = _resolve_generate_prefill(
+        request_obj=request_obj,
+        available_topics=available_topics,
+        available_subtopics=available_subtopics,
+    )
     if request_obj.method == "POST":
         payload, error = _parse_generation_request(deps=deps, request_obj=request_obj)
         if error:
@@ -373,8 +608,11 @@ def generate_page(
         selected_language=deps.default_generation_language_code,
         available_topics=available_topics,
         available_subtopics=available_subtopics,
+        prefill_topic=prefill["topic_value"],
+        prefill_subtopic=prefill["subtopic_value"],
         topic_tag_colors=deps.topic_tag_colors,
         question_types=deps.question_types,
         generation_start_url=url_for_fn("generate_start"),
         generation_progress_url_template=url_for_fn("generate_progress", job_id="__JOB_ID__"),
+        generation_scope_preview_url=url_for_fn("generate_scope_preview"),
     )

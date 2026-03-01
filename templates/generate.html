@@ -4,11 +4,17 @@
   <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-400">Create a focused drill set</p>
   <h2 class="font-display text-2xl text-slate-900 dark:text-zinc-100">Generate New Questions</h2>
   <p class="mt-2 text-sm text-slate-600 dark:text-zinc-300">
-    Choose a topic or subtopic (or create new ones), then set quantity. The app uses
-    existing saved questions as context to reduce repeats.
+    Pick a topic/subtopic scope, then quantity. Type a new value or choose from suggestions.
   </p>
 
-  <form method="post" class="mt-5 space-y-4" id="generate_form" data-generate-start-url="{{ generation_start_url }}" data-generate-progress-url-template="{{ generation_progress_url_template }}">
+  <form
+    method="post"
+    class="mt-5 space-y-4"
+    id="generate_form"
+    data-generate-start-url="{{ generation_start_url }}"
+    data-generate-progress-url-template="{{ generation_progress_url_template }}"
+    data-generate-scope-preview-url="{{ generation_scope_preview_url }}"
+  >
     <div>
       <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="question_type">Question type</label>
       <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="question_type" name="question_type">
@@ -20,35 +26,57 @@
     </div>
 
     <div>
-      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic_select">Existing topic</label>
-      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="topic_select" name="topic_select">
-        <option value="">Select a saved topic (optional)</option>
-        {% for topic_name in available_topics %}
-          <option value="{{ topic_name }}">{{ topic_name }}</option>
-        {% endfor %}
-      </select>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic">Topic</label>
+      <div class="relative">
+        <input
+          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-24 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30"
+          id="topic"
+          name="topic"
+          type="text"
+          autocomplete="off"
+          value="{{ prefill_topic }}"
+          placeholder="e.g. Python backend, system design, data structures"
+        >
+        <button class="absolute inset-y-1.5 right-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600" id="topic_menu_btn" type="button">
+          Options
+        </button>
+        <div class="absolute left-0 right-0 z-30 mt-1 hidden max-h-52 overflow-y-auto rounded-lg border border-slate-300 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800" id="topic_menu"></div>
+      </div>
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Pick an existing topic suggestion or type a new one.</p>
     </div>
 
     <div>
-      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic_new">Or create a new topic</label>
-      <input class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="topic_new" name="topic_new" type="text" placeholder="e.g. Python backend, system design, data structures">
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="subtopic">Subtopic (optional)</label>
+      <div class="relative">
+        <input
+          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-24 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30"
+          id="subtopic"
+          name="subtopic"
+          type="text"
+          autocomplete="off"
+          value="{{ prefill_subtopic }}"
+          placeholder="e.g. Kubernetes, Terraform, CI/CD pipelines"
+        >
+        <button class="absolute inset-y-1.5 right-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600" id="subtopic_menu_btn" type="button">
+          Options
+        </button>
+        <div class="absolute left-0 right-0 z-30 mt-1 hidden max-h-52 overflow-y-auto rounded-lg border border-slate-300 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800" id="subtopic_menu"></div>
+      </div>
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400" id="subtopic_scope_hint">Suggestions are filtered by topic when a topic is set.</p>
     </div>
 
-    <div>
-      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="subtopic_select">Existing subtopic</label>
-      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="subtopic_select" name="subtopic_select">
-        <option value="">Select a saved subtopic (optional)</option>
-        {% for item in available_subtopics %}
-          <option value="{{ item.value }}">{{ item.label }}</option>
-        {% endfor %}
-      </select>
-      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">If topic is empty, selecting a subtopic will auto-use its parent topic.</p>
-    </div>
-
-    <div>
-      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="subtopic_new">Or create a new subtopic</label>
-      <input class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="subtopic_new" name="subtopic_new" type="text" placeholder="e.g. Kubernetes, Terraform, CI/CD pipelines">
-      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">New subtopics are saved under the selected or typed topic.</p>
+    <div class="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/70" id="scope_preview" aria-live="polite">
+      <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">Scope preview</p>
+      <p class="mt-1 text-sm text-slate-700 dark:text-zinc-200" id="scope_summary">Choose a topic or subtopic to preview existing coverage.</p>
+      <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-700 dark:text-zinc-200">
+        <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 dark:border-zinc-600 dark:bg-zinc-900" id="scope_topic_total">Topic questions: --</span>
+        <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 dark:border-zinc-600 dark:bg-zinc-900" id="scope_subtopic_total">Subtopic questions: --</span>
+        <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 dark:border-zinc-600 dark:bg-zinc-900" id="scope_due_total">Due now: --</span>
+      </div>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <button class="hidden rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" type="button" id="apply_suggested_count">Use suggested count</button>
+        <p class="text-xs text-slate-500 dark:text-zinc-400" id="scope_warning"></p>
+      </div>
     </div>
 
     <div>
@@ -79,14 +107,12 @@
           <option value="{{ code }}">{{ label }}</option>
         {% endfor %}
       </select>
-      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Applied to newly generated questions for this topic.</p>
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400" id="topic_color_hint">Applied to newly generated questions for this topic.</p>
     </div>
 
     <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-70" type="submit" id="generate_btn">Generate Unique Questions</button>
     <div class="hidden rounded-lg border border-brand-200 bg-brand-50/60 p-3 dark:border-teal-900/60 dark:bg-teal-950/30" id="generation_progress" aria-live="polite">
-      <p class="mb-2 text-sm font-semibold text-slate-700 dark:text-zinc-200" id="generation_progress_text">
-        Generating questions...
-      </p>
+      <p class="mb-2 text-sm font-semibold text-slate-700 dark:text-zinc-200" id="generation_progress_text">Generating questions...</p>
       <div class="h-2 overflow-hidden rounded-full bg-brand-100 dark:bg-zinc-800">
         <div class="h-full rounded-full bg-brand-500 transition-all duration-300 ease-out" id="generation_progress_bar" style="width: 0%"></div>
       </div>
@@ -99,28 +125,54 @@
       const typeSelect = document.getElementById("question_type");
       const hint = document.getElementById("question_type_hint");
       const btn = document.getElementById("generate_btn");
+      const topicInput = document.getElementById("topic");
+      const topicMenu = document.getElementById("topic_menu");
+      const topicMenuBtn = document.getElementById("topic_menu_btn");
+      const subtopicInput = document.getElementById("subtopic");
+      const subtopicMenu = document.getElementById("subtopic_menu");
+      const subtopicMenuBtn = document.getElementById("subtopic_menu_btn");
+      const subtopicHint = document.getElementById("subtopic_scope_hint");
       const countInput = document.getElementById("count");
+      const topicColorHint = document.getElementById("topic_color_hint");
+      const scopeSummary = document.getElementById("scope_summary");
+      const scopeTopicTotal = document.getElementById("scope_topic_total");
+      const scopeSubtopicTotal = document.getElementById("scope_subtopic_total");
+      const scopeDueTotal = document.getElementById("scope_due_total");
+      const scopeWarning = document.getElementById("scope_warning");
+      const applySuggestedCountBtn = document.getElementById("apply_suggested_count");
       const progressContainer = document.getElementById("generation_progress");
       const progressText = document.getElementById("generation_progress_text");
       const progressBar = document.getElementById("generation_progress_bar");
       const progressMeta = document.getElementById("generation_progress_meta");
       const startUrl = form ? (form.dataset.generateStartUrl || "") : "";
       const progressUrlTemplate = form ? (form.dataset.generateProgressUrlTemplate || "") : "";
+      const scopePreviewUrl = form ? (form.dataset.generateScopePreviewUrl || "") : "";
+      const availableTopics = {{ available_topics | tojson }};
+      const availableSubtopics = {{ available_subtopics | tojson }};
+      const topicColorEntries = {{ topic_tag_colors | tojson }};
+      const topicColorLabels = Object.fromEntries(topicColorEntries);
       const hints = {
-        "theory": "Theory Q&A: open-ended questions answered in text.",
-        "code_review": "Code Review: Gemini writes buggy code that the candidate must fix and comment on during review."
+        theory: "Theory Q&A: open-ended questions answered in text.",
+        code_review: "Code Review: Gemini writes buggy code that the candidate must fix and comment on during review."
       };
       const labels = {
-        "theory": "Generate Unique Questions",
-        "code_review": "Generate Code Review Challenges"
+        theory: "Generate Unique Questions",
+        code_review: "Generate Code Review Challenges"
       };
-      if (typeSelect && hint && btn) {
-        typeSelect.addEventListener("change", () => {
-          const v = typeSelect.value;
-          hint.textContent = hints[v] || hints["theory"];
-          btn.textContent = labels[v] || labels["theory"];
-        });
-      }
+      const normalize = (value) => String(value || "").trim().toLowerCase();
+      const menuActiveClasses = ["bg-slate-100", "dark:bg-zinc-700"];
+      const maxMenuItems = 80;
+      let previewTimeoutHandle = null;
+      let previewAbortController = null;
+
+      const updateQuestionTypeLabel = () => {
+        if (!typeSelect || !hint || !btn) {
+          return;
+        }
+        const selectedType = typeSelect.value;
+        hint.textContent = hints[selectedType] || hints.theory;
+        btn.textContent = labels[selectedType] || labels.theory;
+      };
 
       const setProgress = (inserted, requestedCount) => {
         const safeRequested = Math.max(1, Number(requestedCount) || 1);
@@ -131,14 +183,576 @@
       };
 
       const setIdleState = () => {
+        if (!form || !btn) {
+          return;
+        }
         form.dataset.submitting = "0";
         btn.disabled = false;
       };
 
       const setSubmittingState = () => {
+        if (!form || !btn) {
+          return;
+        }
         form.dataset.submitting = "1";
         btn.disabled = true;
       };
+
+      const setScopeDisplay = ({
+        summary,
+        topicTotal = "--",
+        subtopicTotal = "--",
+        dueTotal = "--",
+        warning = "",
+        suggestedCount = null
+      }) => {
+        if (scopeSummary) {
+          scopeSummary.textContent = summary;
+        }
+        if (scopeTopicTotal) {
+          scopeTopicTotal.textContent = `Topic questions: ${topicTotal}`;
+        }
+        if (scopeSubtopicTotal) {
+          scopeSubtopicTotal.textContent = `Subtopic questions: ${subtopicTotal}`;
+        }
+        if (scopeDueTotal) {
+          scopeDueTotal.textContent = `Due now: ${dueTotal}`;
+        }
+        if (scopeWarning) {
+          scopeWarning.textContent = warning;
+        }
+        if (applySuggestedCountBtn) {
+          const parsed = Number(suggestedCount);
+          if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 20) {
+            applySuggestedCountBtn.classList.remove("hidden");
+            applySuggestedCountBtn.textContent = `Use suggested count (${parsed})`;
+            applySuggestedCountBtn.dataset.suggestedCount = String(parsed);
+          } else {
+            applySuggestedCountBtn.classList.add("hidden");
+            applySuggestedCountBtn.dataset.suggestedCount = "";
+          }
+        }
+      };
+
+      const updateTopicColorHint = (colorCode) => {
+        if (!topicColorHint) {
+          return;
+        }
+        const code = String(colorCode || "").trim().toLowerCase();
+        const label = topicColorLabels[code];
+        if (label) {
+          topicColorHint.textContent = `This topic currently defaults to ${label}. Pick another color only if you want to override it.`;
+        } else {
+          topicColorHint.textContent = "Applied to newly generated questions for this topic.";
+        }
+      };
+
+      const hideMenu = (menu) => {
+        if (!menu) {
+          return;
+        }
+        resetMenuActive(menu);
+        menu.classList.add("hidden");
+      };
+
+      const showMenu = (menu) => {
+        if (!menu) {
+          return;
+        }
+        menu.classList.remove("hidden");
+      };
+
+      const clearMenu = (menu) => {
+        if (!menu) {
+          return;
+        }
+        while (menu.firstChild) {
+          menu.removeChild(menu.firstChild);
+        }
+      };
+
+      const getMenuButtons = (menu) => {
+        if (!menu) {
+          return [];
+        }
+        return Array.from(menu.querySelectorAll("button"));
+      };
+
+      const resetMenuActive = (menu) => {
+        if (!menu) {
+          return;
+        }
+        menu.dataset.activeIndex = "-1";
+        const buttons = getMenuButtons(menu);
+        for (const button of buttons) {
+          for (const className of menuActiveClasses) {
+            button.classList.remove(className);
+          }
+        }
+      };
+
+      const setMenuActiveByIndex = (menu, index) => {
+        if (!menu) {
+          return false;
+        }
+        const buttons = getMenuButtons(menu);
+        if (!buttons.length) {
+          resetMenuActive(menu);
+          return false;
+        }
+        if (index < 0 || index >= buttons.length) {
+          resetMenuActive(menu);
+          return false;
+        }
+        resetMenuActive(menu);
+        const active = buttons[index];
+        for (const className of menuActiveClasses) {
+          active.classList.add(className);
+        }
+        menu.dataset.activeIndex = String(index);
+        active.scrollIntoView({ block: "nearest" });
+        return true;
+      };
+
+      const moveMenuActive = (menu, delta) => {
+        if (!menu) {
+          return false;
+        }
+        const buttons = getMenuButtons(menu);
+        if (!buttons.length) {
+          resetMenuActive(menu);
+          return false;
+        }
+        const current = Number.parseInt(menu.dataset.activeIndex || "-1", 10);
+        let next = 0;
+        if (!Number.isFinite(current) || current < 0 || current >= buttons.length) {
+          next = delta > 0 ? 0 : buttons.length - 1;
+        } else {
+          next = (current + delta + buttons.length) % buttons.length;
+        }
+        return setMenuActiveByIndex(menu, next);
+      };
+
+      const chooseActiveMenuOption = (menu) => {
+        if (!menu) {
+          return false;
+        }
+        const buttons = getMenuButtons(menu);
+        if (!buttons.length) {
+          return false;
+        }
+        const current = Number.parseInt(menu.dataset.activeIndex || "-1", 10);
+        if (!Number.isFinite(current) || current < 0 || current >= buttons.length) {
+          return false;
+        }
+        buttons[current].click();
+        return true;
+      };
+
+      const appendMenuMessage = (menu, message) => {
+        if (!menu) {
+          return;
+        }
+        const el = document.createElement("div");
+        el.className = "rounded-md px-2 py-1.5 text-xs text-slate-500 dark:text-zinc-400";
+        el.textContent = message;
+        menu.appendChild(el);
+      };
+
+      const appendMenuOption = (menu, label, onClick) => {
+        if (!menu) {
+          return;
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "block w-full rounded-md px-2 py-1.5 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-zinc-100 dark:hover:bg-zinc-700";
+        button.textContent = label;
+        button.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+        });
+        button.addEventListener("mouseenter", () => {
+          const buttons = getMenuButtons(menu);
+          const idx = buttons.indexOf(button);
+          if (idx >= 0) {
+            setMenuActiveByIndex(menu, idx);
+          }
+        });
+        button.addEventListener("click", onClick);
+        menu.appendChild(button);
+      };
+
+      const getFilteredTopics = (query) => {
+        const q = normalize(query);
+        return availableTopics
+          .filter((topic) => !q || normalize(topic).includes(q))
+          .slice(0, maxMenuItems);
+      };
+
+      const getFilteredSubtopics = ({ topicValue, queryValue }) => {
+        const topicKey = normalize(topicValue);
+        const queryKey = normalize(queryValue);
+        const seen = new Set();
+        const rows = [];
+        for (const item of availableSubtopics) {
+          const rowTopic = String(item.topic || "").trim();
+          const rowSubtopic = String(item.subtopic || "").trim();
+          if (!rowSubtopic) {
+            continue;
+          }
+          if (topicKey && normalize(rowTopic) !== topicKey) {
+            continue;
+          }
+          if (queryKey) {
+            const label = `${rowTopic} / ${rowSubtopic}`;
+            if (!normalize(rowSubtopic).includes(queryKey) && !normalize(label).includes(queryKey)) {
+              continue;
+            }
+          }
+          const key = `${normalize(rowTopic)}::${normalize(rowSubtopic)}`;
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          rows.push({ topic: rowTopic, subtopic: rowSubtopic });
+          if (rows.length >= maxMenuItems) {
+            break;
+          }
+        }
+        return rows;
+      };
+
+      const rebuildSubtopicSuggestions = () => {
+        if (!topicInput || !subtopicHint) {
+          return;
+        }
+        const filtered = getFilteredSubtopics({
+          topicValue: topicInput.value.trim(),
+          queryValue: ""
+        });
+        if (topicInput.value.trim() && filtered.length === 0) {
+          subtopicHint.textContent = "No saved subtopics for this topic yet. Type a new one to create it.";
+        } else if (topicInput.value.trim()) {
+          subtopicHint.textContent = `Showing ${filtered.length} saved subtopic suggestion(s) for ${topicInput.value.trim()}.`;
+        } else {
+          subtopicHint.textContent = "Click the options button or focus input to see suggestions.";
+        }
+      };
+
+      const renderTopicMenu = () => {
+        if (!topicMenu || !topicInput) {
+          return;
+        }
+        clearMenu(topicMenu);
+        const items = getFilteredTopics(topicInput.value);
+        if (items.length === 0) {
+          appendMenuMessage(topicMenu, "No matching saved topics. Keep typing to create a new one.");
+          return;
+        }
+        for (const topicName of items) {
+          appendMenuOption(topicMenu, topicName, () => {
+            topicInput.value = topicName;
+            rebuildSubtopicSuggestions();
+            hideMenu(topicMenu);
+            if (subtopicInput) {
+              subtopicInput.focus();
+            }
+            queueScopePreview();
+          });
+        }
+        resetMenuActive(topicMenu);
+      };
+
+      const renderSubtopicMenu = () => {
+        if (!subtopicMenu || !subtopicInput || !topicInput) {
+          return;
+        }
+        clearMenu(subtopicMenu);
+        const topicValue = topicInput.value.trim();
+        const items = getFilteredSubtopics({
+          topicValue,
+          queryValue: subtopicInput.value
+        });
+        if (items.length === 0) {
+          appendMenuMessage(subtopicMenu, "No matching saved subtopics. Keep typing to create a new one.");
+          return;
+        }
+        for (const item of items) {
+          const label = topicValue ? item.subtopic : `${item.topic} / ${item.subtopic}`;
+          appendMenuOption(subtopicMenu, label, () => {
+            subtopicInput.value = item.subtopic;
+            if (!topicInput.value.trim()) {
+              topicInput.value = item.topic;
+            }
+            rebuildSubtopicSuggestions();
+            hideMenu(subtopicMenu);
+            queueScopePreview();
+          });
+        }
+        resetMenuActive(subtopicMenu);
+      };
+
+      const maybeInferTopicFromSubtopic = () => {
+        if (!topicInput || !subtopicInput) {
+          return;
+        }
+        const topic = topicInput.value.trim();
+        const subtopic = subtopicInput.value.trim();
+        if (topic || !subtopic) {
+          return;
+        }
+        const matches = availableSubtopics.filter((item) => normalize(item.subtopic) === normalize(subtopic));
+        if (matches.length === 1) {
+          topicInput.value = matches[0].topic;
+        }
+      };
+
+      const queueScopePreview = () => {
+        if (previewTimeoutHandle) {
+          window.clearTimeout(previewTimeoutHandle);
+        }
+        previewTimeoutHandle = window.setTimeout(refreshScopePreview, 220);
+      };
+
+      const refreshScopePreview = async () => {
+        if (!window.fetch || !scopePreviewUrl || !topicInput || !subtopicInput) {
+          return;
+        }
+
+        const topic = topicInput.value.trim();
+        const subtopic = subtopicInput.value.trim();
+        if (!topic && !subtopic) {
+          setScopeDisplay({
+            summary: "Choose a topic or subtopic to preview existing coverage.",
+            warning: ""
+          });
+          updateTopicColorHint("");
+          return;
+        }
+
+        const params = new URLSearchParams();
+        if (topic) {
+          params.set("topic", topic);
+        }
+        if (subtopic) {
+          params.set("subtopic", subtopic);
+        }
+
+        if (previewAbortController) {
+          previewAbortController.abort();
+        }
+        previewAbortController = new AbortController();
+
+        try {
+          const response = await fetch(`${scopePreviewUrl}?${params.toString()}`, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+            signal: previewAbortController.signal
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || "Could not load scope preview.");
+          }
+
+          const scopedTopic = String(payload.topic || "").trim();
+          const scopedSubtopic = String(payload.subtopic || "").trim();
+          let scopeLabel = "Choose a topic or subtopic to preview existing coverage.";
+          if (scopedTopic && scopedSubtopic) {
+            scopeLabel = `Scope: ${scopedTopic} / ${scopedSubtopic}`;
+          } else if (scopedTopic) {
+            scopeLabel = `Scope: ${scopedTopic}`;
+          } else if (scopedSubtopic) {
+            scopeLabel = `Subtopic selected: ${scopedSubtopic} (topic required)`;
+          }
+
+          if (!topic && scopedTopic && scopedSubtopic) {
+            topicInput.value = scopedTopic;
+            rebuildSubtopicSuggestions();
+          }
+
+          setScopeDisplay({
+            summary: scopeLabel,
+            topicTotal: Number(payload.topic_total_questions || 0),
+            subtopicTotal: scopedSubtopic ? Number(payload.subtopic_total_questions || 0) : "--",
+            dueTotal: Number(payload.topic_due_questions || 0),
+            warning: Array.isArray(payload.warnings) ? payload.warnings.join(" ") : "",
+            suggestedCount: payload.recommended_count
+          });
+          updateTopicColorHint(payload.resolved_topic_color || "");
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            return;
+          }
+          const message = error instanceof Error ? error.message : "Could not load scope preview.";
+          setScopeDisplay({
+            summary: "Scope preview unavailable.",
+            warning: message
+          });
+        }
+      };
+
+      if (typeSelect) {
+        typeSelect.addEventListener("change", updateQuestionTypeLabel);
+      }
+      updateQuestionTypeLabel();
+
+      const closeAllMenus = () => {
+        hideMenu(topicMenu);
+        hideMenu(subtopicMenu);
+      };
+
+      if (topicInput) {
+        topicInput.addEventListener("input", () => {
+          renderTopicMenu();
+          showMenu(topicMenu);
+          rebuildSubtopicSuggestions();
+          queueScopePreview();
+        });
+        topicInput.addEventListener("change", () => {
+          hideMenu(topicMenu);
+          rebuildSubtopicSuggestions();
+          queueScopePreview();
+        });
+        topicInput.addEventListener("focus", () => {
+          renderTopicMenu();
+          showMenu(topicMenu);
+        });
+        topicInput.addEventListener("click", () => {
+          renderTopicMenu();
+          showMenu(topicMenu);
+        });
+        topicInput.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            renderTopicMenu();
+            showMenu(topicMenu);
+            moveMenuActive(topicMenu, event.key === "ArrowDown" ? 1 : -1);
+            return;
+          }
+          if (event.key === "Enter") {
+            if (topicMenu && !topicMenu.classList.contains("hidden") && chooseActiveMenuOption(topicMenu)) {
+              event.preventDefault();
+            }
+            return;
+          }
+          if (event.key === "Escape" || event.key === "Tab") {
+            hideMenu(topicMenu);
+          }
+        });
+      }
+
+      if (topicMenuBtn) {
+        topicMenuBtn.addEventListener("click", () => {
+          if (topicMenu && !topicMenu.classList.contains("hidden")) {
+            hideMenu(topicMenu);
+            return;
+          }
+          renderTopicMenu();
+          showMenu(topicMenu);
+          if (topicInput) {
+            topicInput.focus();
+          }
+        });
+      }
+
+      if (subtopicInput) {
+        subtopicInput.addEventListener("input", () => {
+          maybeInferTopicFromSubtopic();
+          renderSubtopicMenu();
+          showMenu(subtopicMenu);
+          rebuildSubtopicSuggestions();
+          queueScopePreview();
+        });
+        subtopicInput.addEventListener("change", () => {
+          hideMenu(subtopicMenu);
+          maybeInferTopicFromSubtopic();
+          rebuildSubtopicSuggestions();
+          queueScopePreview();
+        });
+        subtopicInput.addEventListener("focus", () => {
+          renderSubtopicMenu();
+          showMenu(subtopicMenu);
+        });
+        subtopicInput.addEventListener("click", () => {
+          renderSubtopicMenu();
+          showMenu(subtopicMenu);
+        });
+        subtopicInput.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            renderSubtopicMenu();
+            showMenu(subtopicMenu);
+            moveMenuActive(subtopicMenu, event.key === "ArrowDown" ? 1 : -1);
+            return;
+          }
+          if (event.key === "Enter") {
+            if (subtopicMenu && !subtopicMenu.classList.contains("hidden") && chooseActiveMenuOption(subtopicMenu)) {
+              event.preventDefault();
+            }
+            return;
+          }
+          if (event.key === "Escape" || event.key === "Tab") {
+            hideMenu(subtopicMenu);
+          }
+        });
+      }
+
+      if (subtopicMenuBtn) {
+        subtopicMenuBtn.addEventListener("click", () => {
+          if (subtopicMenu && !subtopicMenu.classList.contains("hidden")) {
+            hideMenu(subtopicMenu);
+            return;
+          }
+          renderSubtopicMenu();
+          showMenu(subtopicMenu);
+          if (subtopicInput) {
+            subtopicInput.focus();
+          }
+        });
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (
+          topicMenu
+          && topicInput
+          && topicMenuBtn
+          && !topicMenu.contains(target)
+          && target !== topicInput
+          && target !== topicMenuBtn
+        ) {
+          hideMenu(topicMenu);
+        }
+        if (
+          subtopicMenu
+          && subtopicInput
+          && subtopicMenuBtn
+          && !subtopicMenu.contains(target)
+          && target !== subtopicInput
+          && target !== subtopicMenuBtn
+        ) {
+          hideMenu(subtopicMenu);
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeAllMenus();
+        }
+      });
+
+      if (applySuggestedCountBtn && countInput) {
+        applySuggestedCountBtn.addEventListener("click", () => {
+          const suggested = Number(applySuggestedCountBtn.dataset.suggestedCount || "");
+          if (!Number.isFinite(suggested)) {
+            return;
+          }
+          countInput.value = String(Math.max(1, Math.min(20, Math.round(suggested))));
+        });
+      }
+
+      rebuildSubtopicSuggestions();
+      queueScopePreview();
 
       if (form && btn && progressContainer && progressText && progressBar && progressMeta) {
         form.addEventListener("submit", async (event) => {
@@ -150,6 +764,7 @@
             return;
           }
           setSubmittingState();
+
           const selectedType = typeSelect ? typeSelect.value : "theory";
           const count = Math.max(1, parseInt(countInput ? countInput.value : "1", 10) || 1);
           const noun = selectedType === "code_review" ? "challenge" : "question";
@@ -172,9 +787,7 @@
               const progressUrl = progressUrlTemplate.replace("__JOB_ID__", encodeURIComponent(activeJobId));
               const progressResponse = await fetch(progressUrl, {
                 method: "GET",
-                headers: {
-                  "Accept": "application/json"
-                },
+                headers: { Accept: "application/json" },
                 cache: "no-store"
               });
               const progressPayload = await progressResponse.json().catch(() => ({}));
@@ -227,7 +840,7 @@
               method: "POST",
               headers: {
                 "X-Requested-With": "XMLHttpRequest",
-                "Accept": "application/json"
+                Accept: "application/json"
               },
               body: formData
             });

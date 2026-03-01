@@ -27,6 +27,8 @@ class GenerationFlowInputs:
     get_recent_topic_color_fn: Callable[[str], str | None]
     get_existing_topics_fn: Callable[..., list[str]]
     list_topic_subtopics_fn: Callable[..., Any]
+    list_topics_with_stats_fn: Callable[..., Any]
+    list_subtopics_with_stats_fn: Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,8 @@ def build_handler_deps_bundle(
             get_recent_topic_color_fn=inputs.generation.get_recent_topic_color_fn,
             get_existing_topics_fn=inputs.generation.get_existing_topics_fn,
             list_topic_subtopics_fn=inputs.generation.list_topic_subtopics_fn,
+            list_topics_with_stats_fn=inputs.generation.list_topics_with_stats_fn,
+            list_subtopics_with_stats_fn=inputs.generation.list_subtopics_with_stats_fn,
             default_generation_language_code=inputs.options.default_generation_language_code,
             generation_language_by_code=inputs.options.generation_language_by_code,
             generation_languages=inputs.options.generation_languages,
@@ -160,6 +164,8 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 get_recent_topic_color_fn=namespace.get_recent_topic_color,
                 get_existing_topics_fn=namespace.get_existing_topics,
                 list_topic_subtopics_fn=namespace.list_topic_subtopics,
+                list_topics_with_stats_fn=namespace.list_topics_with_stats,
+                list_subtopics_with_stats_fn=namespace.list_subtopics_with_stats,
             ),
             review=ReviewFlowInputs(
                 get_question_by_id_fn=namespace.get_question_by_id,

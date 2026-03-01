@@ -40,6 +40,13 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
             jsonify_fn=jsonify,
         )
 
+    def generate_scope_preview():
+        return generation_handler.generate_scope_preview(
+            deps=deps_provider().generation,
+            request_obj=request,
+            jsonify_fn=jsonify,
+        )
+
     def review():
         return review_handler.review_page(
             deps=deps_provider().review,
@@ -111,6 +118,12 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
         "/generate/progress/<string:job_id>",
         endpoint="generate_progress",
         view_func=generate_progress,
+        methods=["GET"],
+    )
+    app.add_url_rule(
+        "/generate/scope-preview",
+        endpoint="generate_scope_preview",
+        view_func=generate_scope_preview,
         methods=["GET"],
     )
     app.add_url_rule("/review", endpoint="review", view_func=review, methods=["GET"])

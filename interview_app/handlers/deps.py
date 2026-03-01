@@ -20,6 +20,8 @@ class GenerationHandlerDeps:
     get_recent_topic_color_fn: Callable[[str], str | None]
     get_existing_topics_fn: Callable[..., list[str]]
     list_topic_subtopics_fn: Callable[..., Any]
+    list_topics_with_stats_fn: Callable[..., Any]
+    list_subtopics_with_stats_fn: Callable[..., Any]
     default_generation_language_code: str
     generation_language_by_code: dict[str, str]
     generation_languages: list[tuple[str, str]]

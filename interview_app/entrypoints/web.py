@@ -163,6 +163,8 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 get_recent_topic_color_fn=question_repository.get_recent_topic_color,
                 get_existing_topics_fn=question_repository.get_existing_topics,
                 list_topic_subtopics_fn=question_repository.list_topic_subtopics,
+                list_topics_with_stats_fn=question_repository.list_topics_with_stats,
+                list_subtopics_with_stats_fn=question_repository.list_subtopics_with_stats,
             ),
             review=ReviewFlowInputs(
                 get_question_by_id_fn=question_repository.get_question_by_id,
