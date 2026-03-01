@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6">
-  <h2 class="mb-4 font-display text-2xl text-slate-900">All Questions</h2>
+<section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+  <h2 class="mb-4 font-display text-2xl text-slate-900 dark:text-zinc-100">All Questions</h2>
   {% if questions %}
-    <div class="overflow-x-auto rounded-xl border border-slate-200">
-      <table class="min-w-full divide-y divide-slate-200 text-sm">
-        <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+    <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-700">
+      <table class="min-w-full divide-y divide-slate-200 text-sm dark:divide-zinc-700">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600 dark:bg-zinc-800 dark:text-zinc-300">
           <tr>
             <th class="px-3 py-2 text-left">ID</th>
             <th class="px-3 py-2 text-left">Question</th>
@@ -16,10 +16,10 @@
             <th class="px-3 py-2 text-left">Repetitions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
+        <tbody class="divide-y divide-slate-100 bg-white text-slate-700 dark:divide-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
           {% for q in questions %}
             <tr class="align-top">
-              <td class="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{{ q.id }}</td>
+              <td class="whitespace-nowrap px-3 py-2 font-medium text-slate-900 dark:text-zinc-100">{{ q.id }}</td>
               <td class="px-3 py-2">{{ q.text }}</td>
               <td class="px-3 py-2">{{ q.topic or "General" }}</td>
               <td class="px-3 py-2">{{ "Yes" if q.suggested_answer else "No" }}</td>
@@ -32,7 +32,7 @@
       </table>
     </div>
   {% else %}
-    <p class="text-slate-600">No questions saved yet.</p>
+    <p class="text-slate-600 dark:text-zinc-300">No questions saved yet.</p>
   {% endif %}
 </section>
 {% endblock %}

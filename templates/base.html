@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,6 +10,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: "class",
       theme: {
         extend: {
           fontFamily: {
@@ -33,20 +34,89 @@
       }
     };
   </script>
+  <script>
+    (() => {
+      try {
+        const stored = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (stored === "dark" || (!stored && prefersDark)) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (_error) {
+        // Ignore localStorage errors and keep default theme.
+      }
+    })();
+  </script>
+  <style>
+    html {
+      color-scheme: light;
+    }
+
+    body {
+      background-color: #f3f4f6;
+      background-image: linear-gradient(145deg, #e2e8f0 0%, #f6f7f9 45%, #dbeafe 100%);
+      background-repeat: no-repeat;
+      background-size: cover;
+      background-attachment: fixed;
+    }
+
+    html.dark {
+      color-scheme: dark;
+    }
+
+    html.dark body {
+      background-color: #09090b;
+      background-image: linear-gradient(145deg, #09090b 0%, #18181b 52%, #042f2e 100%);
+    }
+
+    html.dark .bg-brand-500 {
+      background-color: #0f766e !important;
+      border-color: #0f766e !important;
+    }
+
+    html.dark .hover\:bg-brand-600:hover {
+      background-color: #115e59 !important;
+    }
+
+    html.dark .border-brand-500 {
+      border-color: #14b8a6 !important;
+    }
+
+    html.dark .text-brand-500 {
+      color: #14b8a6 !important;
+    }
+
+    html.dark .focus\:border-brand-500:focus {
+      border-color: #14b8a6 !important;
+    }
+
+    html.dark .focus\:ring-brand-100:focus {
+      --tw-ring-color: rgb(20 184 166 / 0.28) !important;
+    }
+
+    html.dark .focus\:ring-brand-500:focus {
+      --tw-ring-color: rgb(20 184 166 / 0.45) !important;
+    }
+  </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-slate-100 via-paper to-blue-50 text-ink">
-  <header class="sticky top-0 z-20 border-b border-white/60 bg-white/80 backdrop-blur">
+<body class="min-h-screen text-ink transition-colors dark:text-zinc-100">
+  <header class="sticky top-0 z-20 border-b border-white/60 bg-white/80 backdrop-blur transition-colors dark:border-zinc-800 dark:bg-zinc-900/80">
     <div class="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
       <a class="flex flex-col no-underline" href="{{ url_for('index') }}">
-        <span class="font-display text-xl leading-tight text-slate-900">Interview Repetition</span>
-        <span class="text-xs font-medium tracking-wide text-slate-500">Spaced practice for technical interviews</span>
+        <span class="font-display text-xl leading-tight text-slate-900 dark:text-zinc-100">Interview Repetition</span>
+        <span class="text-xs font-medium tracking-wide text-slate-500 dark:text-zinc-400">Spaced practice for technical interviews</span>
       </a>
-      <nav class="flex flex-wrap items-center gap-2" aria-label="Primary">
-        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'index' else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('index') }}">Dashboard</a>
-        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'generate' else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('generate') }}">Generate</a>
-        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint in ['review', 'review_submit', 'review_answer', 'review_feedback'] else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('review') }}">Review</a>
-        <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'questions' else 'text-slate-700 hover:bg-slate-100' }}" href="{{ url_for('questions') }}">All Questions</a>
-      </nav>
+      <div class="flex flex-wrap items-center gap-2">
+        <nav class="flex flex-wrap items-center gap-2" aria-label="Primary">
+          <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'index' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('index') }}">Dashboard</a>
+          <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'generate' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('generate') }}">Generate</a>
+          <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint in ['review', 'review_submit', 'review_answer', 'review_feedback'] else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('review') }}">Review</a>
+          <a class="rounded-full px-3 py-1.5 text-sm font-semibold transition {{ 'bg-brand-500 text-white shadow-soft' if request.endpoint == 'questions' else 'text-slate-700 hover:bg-slate-100 dark:text-zinc-200 dark:hover:bg-zinc-800' }}" href="{{ url_for('questions') }}">All Questions</a>
+        </nav>
+        <button id="theme-toggle" type="button" class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700">
+          Dark mode
+        </button>
+      </div>
     </div>
   </header>
 
@@ -57,11 +127,11 @@
           {% for category, message in messages %}
             <div class="rounded-xl border px-4 py-3 text-sm shadow-sm
               {% if category == 'success' %}
-                border-emerald-200 bg-emerald-50 text-emerald-800
+                border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200
               {% elif category == 'error' %}
-                border-rose-200 bg-rose-50 text-rose-800
+                border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200
               {% else %}
-                border-blue-200 bg-blue-50 text-blue-800
+                border-blue-200 bg-blue-50 text-blue-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200
               {% endif %}
             ">{{ message }}</div>
           {% endfor %}
@@ -70,5 +140,30 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <script>
+    (() => {
+      const toggle = document.getElementById("theme-toggle");
+      if (!toggle) {
+        return;
+      }
+      const root = document.documentElement;
+
+      const syncLabel = () => {
+        const dark = root.classList.contains("dark");
+        toggle.textContent = dark ? "Light mode" : "Dark mode";
+      };
+
+      syncLabel();
+      toggle.addEventListener("click", () => {
+        const dark = root.classList.toggle("dark");
+        try {
+          localStorage.setItem("theme", dark ? "dark" : "light");
+        } catch (_error) {
+          // Ignore localStorage errors.
+        }
+        syncLabel();
+      });
+    })();
+  </script>
 </body>
 </html>
