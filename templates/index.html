@@ -15,36 +15,10 @@
     </article>
   </div>
 
-  <div class="mt-4">
+  <div class="mt-4 flex flex-wrap gap-2">
     <a class="inline-flex rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('generate') }}">Generate Questions</a>
+    <button class="inline-flex rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" id="start-review-open" type="button">Start Review</button>
   </div>
-
-  <form class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/70" method="get" action="{{ url_for('review') }}">
-    <p class="mb-2 text-sm font-semibold text-slate-700 dark:text-zinc-200">Start review by topic</p>
-    <p class="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400">Topics (multi-select)</p>
-    <div class="max-h-44 overflow-y-auto rounded-lg border border-slate-300 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-      {% if available_topics %}
-        <div class="grid gap-1 sm:grid-cols-2">
-          {% for topic_name in available_topics %}
-            <label class="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 transition hover:bg-slate-100 dark:text-zinc-100 dark:hover:bg-zinc-700/60">
-              <input class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-900" type="checkbox" name="topics" value="{{ topic_name }}">
-              <span class="break-words">{{ topic_name }}</span>
-            </label>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="px-2 py-1 text-sm text-slate-500 dark:text-zinc-400">No saved topics yet. Generate questions first.</p>
-      {% endif %}
-    </div>
-    <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Leave empty to review across all topics.</p>
-
-    <label class="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-zinc-200" for="randomize">
-      <input class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-800" id="randomize" name="randomize" type="checkbox" value="1">
-      Randomize next due question
-    </label>
-
-    <button class="mt-3 rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Start Review</button>
-  </form>
 </section>
 
 <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
@@ -70,4 +44,84 @@
     <p class="text-slate-600 dark:text-zinc-300">No questions yet. Generate some first.</p>
   {% endif %}
 </section>
+
+<div class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[1px]" id="start-review-modal" role="dialog" aria-modal="true" aria-labelledby="start-review-title">
+  <div class="w-full max-w-2xl rounded-2xl border border-white/70 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100" id="start-review-title">Start review by topic</h3>
+        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Choose one or more topics, or leave empty to review everything due.</p>
+      </div>
+      <button class="rounded-lg border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" id="start-review-close" type="button">Close</button>
+    </div>
+
+    <form class="mt-4" method="get" action="{{ url_for('review') }}">
+      <p class="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400">Topics (multi-select)</p>
+      <div class="max-h-52 overflow-y-auto rounded-lg border border-slate-300 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+        {% if available_topics %}
+          <div class="grid gap-1 sm:grid-cols-2">
+            {% for topic_name in available_topics %}
+              <label class="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 transition hover:bg-slate-100 dark:text-zinc-100 dark:hover:bg-zinc-700/60">
+                <input class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-900" type="checkbox" name="topics" value="{{ topic_name }}">
+                <span class="break-words">{{ topic_name }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="px-2 py-1 text-sm text-slate-500 dark:text-zinc-400">No saved topics yet. Generate questions first.</p>
+        {% endif %}
+      </div>
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Leave empty to review across all topics.</p>
+
+      <label class="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-zinc-200" for="start-review-randomize">
+        <input class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-zinc-600 dark:bg-zinc-800" id="start-review-randomize" name="randomize" type="checkbox" value="1">
+        Randomize next due question
+      </label>
+
+      <div class="mt-4 flex flex-wrap justify-end gap-2">
+        <button class="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" id="start-review-cancel" type="button">Cancel</button>
+        <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Start Review</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const openBtn = document.getElementById("start-review-open");
+    const modal = document.getElementById("start-review-modal");
+    const closeBtn = document.getElementById("start-review-close");
+    const cancelBtn = document.getElementById("start-review-cancel");
+
+    if (!openBtn || !modal || !closeBtn || !cancelBtn) {
+      return;
+    }
+
+    const openModal = () => {
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      document.body.classList.add("overflow-hidden");
+    };
+
+    const closeModal = () => {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+      document.body.classList.remove("overflow-hidden");
+    };
+
+    openBtn.addEventListener("click", openModal);
+    closeBtn.addEventListener("click", closeModal);
+    cancelBtn.addEventListener("click", closeModal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeModal();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+        closeModal();
+      }
+    });
+  })();
+</script>
 {% endblock %}
