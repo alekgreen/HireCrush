@@ -16,6 +16,10 @@ from interview_app.application.runtime_facade import (
     RuntimeServiceModules,
     RuntimeUtilityDeps,
 )
+from interview_app.adapters.persistence.sqlite.repositories import (
+    SQLiteFeedbackRepository,
+    SQLiteQuestionRepository,
+)
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
@@ -46,21 +50,6 @@ from interview_app.presentation.deps_factory import (
     build_handler_deps_bundle,
 )
 from interview_app.presentation.routes import register_routes
-from interview_app.repository import (
-    get_due_question,
-    get_existing_topics,
-    get_generation_context_questions,
-    get_latest_feedback,
-    get_next_upcoming,
-    get_question_by_id,
-    get_recent_topic_color,
-    get_recent_questions,
-    get_stats,
-    list_questions,
-    list_questions_by_topic,
-    list_topics_with_stats,
-    save_feedback,
-)
 from interview_app.services import (
     gemini_service,
     generation_service,
@@ -81,6 +70,9 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     app = create_flask_app(import_name)
     if config_override:
         app.config.update(config_override)
+
+    question_repository = SQLiteQuestionRepository()
+    feedback_repository = SQLiteFeedbackRepository()
 
     runtime_ref: dict[str, RuntimeFacade] = {}
     runtime_callables = RuntimeCallables(
@@ -106,8 +98,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
             parse_gemini_questions_fn=parse_gemini_questions,
         ),
         repositories=RuntimeRepositoryDeps(
-            get_generation_context_questions_fn=get_generation_context_questions,
-            get_question_by_id_fn=get_question_by_id,
+            question_repository=question_repository,
         ),
         utils=RuntimeUtilityDeps(
             clean_question_text_fn=clean_question_text,
@@ -154,22 +145,22 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     default_handler_deps_bundle = build_handler_deps_bundle(
         inputs=HandlerDepsInputs(
             home=HomeQueryInputs(
-                get_stats_fn=get_stats,
-                get_recent_questions_fn=get_recent_questions,
-                get_existing_topics_fn=get_existing_topics,
+                get_stats_fn=question_repository.get_stats,
+                get_recent_questions_fn=question_repository.get_recent_questions,
+                get_existing_topics_fn=question_repository.get_existing_topics,
             ),
             generation=GenerationFlowInputs(
                 add_questions_fn=runtime.add_questions,
                 format_http_error_fn=runtime.format_http_error,
-                get_recent_topic_color_fn=get_recent_topic_color,
-                get_existing_topics_fn=get_existing_topics,
+                get_recent_topic_color_fn=question_repository.get_recent_topic_color,
+                get_existing_topics_fn=question_repository.get_existing_topics,
             ),
             review=ReviewFlowInputs(
-                get_question_by_id_fn=get_question_by_id,
-                get_due_question_fn=get_due_question,
-                get_next_upcoming_fn=get_next_upcoming,
-                get_latest_feedback_fn=get_latest_feedback,
-                get_stats_fn=get_stats,
+                get_question_by_id_fn=question_repository.get_question_by_id,
+                get_due_question_fn=question_repository.get_due_question,
+                get_next_upcoming_fn=question_repository.get_next_upcoming,
+                get_latest_feedback_fn=feedback_repository.get_latest_feedback,
+                get_stats_fn=question_repository.get_stats,
                 apply_review_fn=runtime.apply_review,
                 normalize_topic_filters_fn=runtime.normalize_topic_filters,
                 is_randomized_review_fn=runtime.is_randomized_review,
@@ -177,14 +168,14 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 review_redirect_fn=review_redirect,
                 generate_answer_for_question_fn=runtime.generate_answer_for_question,
                 call_gemini_for_feedback_fn=runtime.call_gemini_for_feedback,
-                save_feedback_fn=save_feedback,
+                save_feedback_fn=feedback_repository.save_feedback,
                 normalize_audio_mime_type_fn=runtime.normalize_audio_mime_type,
                 call_gemini_for_transcription_fn=runtime.call_gemini_for_transcription,
             ),
             catalog=CatalogQueryInputs(
-                list_questions_fn=list_questions,
-                list_questions_by_topic_fn=list_questions_by_topic,
-                list_topics_with_stats_fn=list_topics_with_stats,
+                list_questions_fn=question_repository.list_questions,
+                list_questions_by_topic_fn=question_repository.list_questions_by_topic,
+                list_topics_with_stats_fn=question_repository.list_topics_with_stats,
             ),
             options=PresentationOptions(
                 default_generation_language_code=DEFAULT_GENERATION_LANGUAGE_CODE,

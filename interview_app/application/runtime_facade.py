@@ -2,6 +2,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from interview_app.application.ports.repositories import QuestionRepository
+
 
 @dataclass(frozen=True)
 class RuntimeCallables:
@@ -34,8 +36,7 @@ class RuntimeParserDeps:
 
 @dataclass(frozen=True)
 class RuntimeRepositoryDeps:
-    get_generation_context_questions_fn: Callable[..., Any]
-    get_question_by_id_fn: Callable[..., Any]
+    question_repository: QuestionRepository
 
 
 @dataclass(frozen=True)
@@ -87,8 +88,7 @@ class RuntimeFacade:
         self._parse_json_from_text_fn = deps.parsers.parse_json_from_text_fn
         self._parse_gemini_questions_fn = deps.parsers.parse_gemini_questions_fn
 
-        self._get_generation_context_questions_fn = deps.repositories.get_generation_context_questions_fn
-        self._get_question_by_id_fn = deps.repositories.get_question_by_id_fn
+        self._question_repository = deps.repositories.question_repository
 
         self._clean_question_text_fn = deps.utils.clean_question_text_fn
         self._question_hash_fn = deps.utils.question_hash_fn
@@ -191,7 +191,7 @@ class RuntimeFacade:
             additional_context=additional_context,
             topic_color=resolved_topic_color,
             get_db_fn=self._get_db_fn,
-            get_generation_context_questions_fn=self._get_generation_context_questions_fn,
+            get_generation_context_questions_fn=self._question_repository.get_generation_context_questions,
             call_gemini_for_questions_fn=self._runtime_callables.get_call_gemini_for_questions(),
             clean_question_text_fn=self._clean_question_text_fn,
             question_hash_fn=self._question_hash_fn,
@@ -205,7 +205,7 @@ class RuntimeFacade:
         return self._question_service.generate_answer_for_question(
             question_id=question_id,
             get_db_fn=self._get_db_fn,
-            get_question_by_id_fn=self._get_question_by_id_fn,
+            get_question_by_id_fn=self._question_repository.get_question_by_id,
             call_gemini_for_answer_fn=self._runtime_callables.get_call_gemini_for_answer(),
         )
 
