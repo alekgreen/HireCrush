@@ -75,7 +75,11 @@ def _normalize_topic_filters(topics: list[str] | None) -> list[str]:
     return cleaned
 
 
-def get_due_question(topics: list[str] | None = None, randomize: bool = False):
+def get_due_question(
+    topics: list[str] | None = None,
+    randomize: bool = False,
+    exclude_question_id: int | None = None,
+):
     db = get_db()
     current = iso(now_utc())
     filters = _normalize_topic_filters(topics)
@@ -92,6 +96,9 @@ def get_due_question(topics: list[str] | None = None, randomize: bool = False):
             f" AND LOWER(COALESCE(topic, '')) IN ({placeholders})"
         )
         params.extend(filters)
+    if exclude_question_id is not None:
+        base_query += " AND id != ?"
+        params.append(int(exclude_question_id))
 
     if randomize:
         base_query += " ORDER BY RANDOM() LIMIT 1"

@@ -172,9 +172,10 @@ def test_review_route_filters_due_question_by_selected_topics(client):
 def test_review_route_passes_randomize_and_topics_to_selector(monkeypatch, client):
     captured = {}
 
-    def fake_get_due_question(topics=None, randomize=False):
+    def fake_get_due_question(topics=None, randomize=False, exclude_question_id=None):
         captured["topics"] = topics
         captured["randomize"] = randomize
+        captured["exclude_question_id"] = exclude_question_id
         return None
 
     monkeypatch.setattr(app_module, "get_due_question", fake_get_due_question)
@@ -183,7 +184,11 @@ def test_review_route_passes_randomize_and_topics_to_selector(monkeypatch, clien
     res = client.get("/review?topics=python&topics=sql&randomize=1")
 
     assert res.status_code == 200
-    assert captured == {"topics": ["python", "sql"], "randomize": True}
+    assert captured == {
+        "topics": ["python", "sql"],
+        "randomize": True,
+        "exclude_question_id": None,
+    }
 
 
 def test_review_submit_redirect_preserves_filters(client):
@@ -224,6 +229,36 @@ def test_review_answer_redirect_preserves_filters(monkeypatch, client):
     assert query.get("qid") == [str(question_id)]
     assert query.get("topics") == ["distributed systems"]
     assert query.get("randomize") == ["1"]
+
+
+def test_review_skip_redirect_preserves_filters(client):
+    question_id = insert_question("Explain read replicas.")
+
+    response = client.post(
+        f"/review/{question_id}/skip",
+        data={"topics": ["python", "sql"], "randomize": "1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    parsed = urlparse(response.headers["Location"])
+    query = parse_qs(parsed.query)
+    assert parsed.path == "/review"
+    assert query.get("skip_qid") == [str(question_id)]
+    assert query.get("topics") == ["python", "sql"]
+    assert query.get("randomize") == ["1"]
+
+
+def test_review_route_skip_qid_loads_another_due_question(client):
+    first_id = insert_question("Question one?", topic="python")
+    insert_question("Question two?", topic="python")
+
+    res = client.get(f"/review?topics=python&skip_qid={first_id}")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Question two?" in body
+    assert "Question one?" not in body
 
 
 def test_call_gemini_uses_schema_and_falls_back_model(monkeypatch, client):

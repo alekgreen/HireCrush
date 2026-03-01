@@ -466,12 +466,15 @@ def review_redirect(
     randomize: bool = False,
     qid: int | None = None,
     show_feedback: bool = False,
+    skip_qid: int | None = None,
 ):
     params: dict[str, object] = {}
     if qid is not None:
         params["qid"] = qid
     if show_feedback:
         params["show_feedback"] = 1
+    if skip_qid is not None:
+        params["skip_qid"] = int(skip_qid)
     if randomize:
         params["randomize"] = 1
     if topics:
@@ -565,6 +568,7 @@ def generate():
 def review():
     selected_topics = normalize_topic_filters(request.args.getlist("topics"))
     randomize = is_randomized_review(request.args.get("randomize", ""))
+    skipped_qid = request.args.get("skip_qid", type=int)
     requested_qid = request.args.get("qid", type=int)
     show_feedback = str(request.args.get("show_feedback", "")).strip().lower() in {
         "1",
@@ -573,7 +577,13 @@ def review():
     }
     question = get_question_by_id(requested_qid) if requested_qid else None
     if question is None:
-        question = get_due_question(topics=selected_topics, randomize=randomize)
+        question = get_due_question(
+            topics=selected_topics,
+            randomize=randomize,
+            exclude_question_id=skipped_qid,
+        )
+        if question is None and skipped_qid is not None:
+            question = get_due_question(topics=selected_topics, randomize=randomize)
 
     stats = get_stats()
     upcoming = None
@@ -609,6 +619,19 @@ def review_submit(question_id: int):
     if not selected_topics and not randomize:
         selected_topics, randomize = extract_review_filters_from_referrer()
     return review_redirect(topics=selected_topics, randomize=randomize)
+
+
+@app.route("/review/<int:question_id>/skip", methods=["POST"])
+def review_skip(question_id: int):
+    selected_topics = normalize_topic_filters(request.form.getlist("topics"))
+    randomize = is_randomized_review(request.form.get("randomize", ""))
+    if not selected_topics and not randomize:
+        selected_topics, randomize = extract_review_filters_from_referrer()
+    return review_redirect(
+        topics=selected_topics,
+        randomize=randomize,
+        skip_qid=question_id,
+    )
 
 
 @app.route("/review/<int:question_id>/answer", methods=["POST"])
