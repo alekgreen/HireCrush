@@ -9,6 +9,7 @@ def insert_question(
     subtopic=None,
     suggested_answer=None,
     topic_color=None,
+    subtopic_color=None,
 ):
     with flask_app.app_context():
         db = get_db()
@@ -16,9 +17,9 @@ def insert_question(
         db.execute(
             """
             INSERT INTO questions (
-                text, text_hash, topic, subtopic, topic_color, created_at, next_review_at,
+                text, text_hash, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at,
                 suggested_answer, repetitions, interval_days, ease_factor
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
             """,
             (
                 text,
@@ -26,6 +27,7 @@ def insert_question(
                 topic,
                 subtopic,
                 topic_color,
+                subtopic_color,
                 iso(now),
                 iso(now),
                 suggested_answer,

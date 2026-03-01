@@ -46,11 +46,12 @@
           <p class="mt-3 text-sm text-slate-500 dark:text-zinc-400">
             Topic:
             {% set topic_style = topic_tag_styles.get(question.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+            {% set subtopic_style = topic_tag_styles.get(question.subtopic_color or question.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
             {% if question.topic %}
               <a class="topic-tag ml-1 rounded-full border px-2 py-0.5 text-xs font-semibold no-underline" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};" href="{{ url_for('topics', topic=question.topic) }}">{{ question.topic }}</a>
               {% if question.subtopic %}
                 <span class="ml-1 text-xs text-slate-400 dark:text-zinc-500">/</span>
-                <a class="topic-tag ml-1 rounded-full border px-2 py-0.5 text-xs font-semibold no-underline" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};" href="{{ url_for('topics', topic=question.topic, subtopic=question.subtopic) }}">{{ question.subtopic }}</a>
+                <a class="topic-tag ml-1 rounded-full border px-2 py-0.5 text-xs font-semibold no-underline" style="--topic-border: {{ subtopic_style.border }}; --topic-bg: {{ subtopic_style.bg }}; --topic-text: {{ subtopic_style.text }}; --topic-border-dark: {{ subtopic_style.border_dark }}; --topic-bg-dark: {{ subtopic_style.bg_dark }}; --topic-text-dark: {{ subtopic_style.text_dark }};" href="{{ url_for('topics', topic=question.topic, subtopic=question.subtopic) }}">{{ question.subtopic }}</a>
               {% endif %}
             {% else %}
               <span class="topic-tag ml-1 rounded-full border px-2 py-0.5 text-xs font-semibold" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};">General</span>

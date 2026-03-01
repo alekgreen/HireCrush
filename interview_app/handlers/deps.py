@@ -66,8 +66,10 @@ class CatalogHandlerDeps:
     update_question_fn: Callable[..., bool]
     delete_question_fn: Callable[[int], bool]
     rename_topic_fn: Callable[[str, str], int]
+    update_topic_color_fn: Callable[[str, str], int]
     delete_topic_fn: Callable[[str], int]
     rename_subtopic_fn: Callable[[str, str, str], int]
+    update_subtopic_color_fn: Callable[[str, str, str], int]
     delete_subtopic_fn: Callable[[str, str], int]
 
 

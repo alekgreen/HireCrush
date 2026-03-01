@@ -67,8 +67,10 @@ class CatalogQueryInputs:
     update_question_fn: Callable[..., bool]
     delete_question_fn: Callable[[int], bool]
     rename_topic_fn: Callable[[str, str], int]
+    update_topic_color_fn: Callable[[str, str], int]
     delete_topic_fn: Callable[[str], int]
     rename_subtopic_fn: Callable[[str, str, str], int]
+    update_subtopic_color_fn: Callable[[str, str, str], int]
     delete_subtopic_fn: Callable[[str, str], int]
 
 
@@ -153,8 +155,10 @@ def build_handler_deps_bundle(
             update_question_fn=inputs.catalog.update_question_fn,
             delete_question_fn=inputs.catalog.delete_question_fn,
             rename_topic_fn=inputs.catalog.rename_topic_fn,
+            update_topic_color_fn=inputs.catalog.update_topic_color_fn,
             delete_topic_fn=inputs.catalog.delete_topic_fn,
             rename_subtopic_fn=inputs.catalog.rename_subtopic_fn,
+            update_subtopic_color_fn=inputs.catalog.update_subtopic_color_fn,
             delete_subtopic_fn=inputs.catalog.delete_subtopic_fn,
         ),
     )
@@ -209,8 +213,10 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 update_question_fn=namespace.update_question,
                 delete_question_fn=namespace.delete_question,
                 rename_topic_fn=namespace.rename_topic,
+                update_topic_color_fn=namespace.update_topic_color,
                 delete_topic_fn=namespace.delete_topic,
                 rename_subtopic_fn=namespace.rename_subtopic,
+                update_subtopic_color_fn=namespace.update_subtopic_color,
                 delete_subtopic_fn=namespace.delete_subtopic,
             ),
             options=PresentationOptions(

@@ -264,7 +264,7 @@ class SQLiteQuestionRepository(QuestionRepository):
         db = self._get_db()
         return db.execute(
             """
-            SELECT id, text, topic, subtopic, topic_color, created_at
+            SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at
             FROM questions
             ORDER BY created_at DESC
             LIMIT ?
@@ -276,7 +276,7 @@ class SQLiteQuestionRepository(QuestionRepository):
         db = self._get_db()
         return db.execute(
             """
-            SELECT id, text, topic, subtopic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
             FROM questions
             ORDER BY next_review_at ASC
             LIMIT ?
@@ -329,7 +329,17 @@ class SQLiteQuestionRepository(QuestionRepository):
                       AND TRIM(qq.topic_color) <> ''
                     ORDER BY qq.created_at DESC
                     LIMIT 1
-                ) AS topic_color
+                ) AS topic_color,
+                (
+                    SELECT qq.subtopic_color
+                    FROM questions qq
+                    WHERE LOWER(COALESCE(qq.topic, '')) = LOWER(COALESCE(q.topic, ''))
+                      AND LOWER(COALESCE(qq.subtopic, '')) = LOWER(COALESCE(q.subtopic, ''))
+                      AND qq.subtopic_color IS NOT NULL
+                      AND TRIM(qq.subtopic_color) <> ''
+                    ORDER BY qq.created_at DESC
+                    LIMIT 1
+                ) AS subtopic_color
             FROM questions q
             WHERE q.topic IS NOT NULL AND TRIM(q.topic) <> ''
               AND q.subtopic IS NOT NULL AND TRIM(q.subtopic) <> ''
@@ -354,7 +364,7 @@ class SQLiteQuestionRepository(QuestionRepository):
             return []
         return db.execute(
             """
-            SELECT id, text, topic, subtopic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
             FROM questions
             WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
             ORDER BY next_review_at ASC
@@ -371,7 +381,7 @@ class SQLiteQuestionRepository(QuestionRepository):
             return []
         return db.execute(
             """
-            SELECT id, text, topic, subtopic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            SELECT id, text, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
             FROM questions
             WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
               AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
@@ -465,6 +475,26 @@ class SQLiteQuestionRepository(QuestionRepository):
         db.commit()
         return max(0, int(cursor.rowcount or 0))
 
+    def update_topic_color(self, topic: str, color: str) -> int:
+        db = self._get_db()
+        topic_clean = str(topic or "").strip()
+        color_clean = str(color or "").strip().lower()
+        if not topic_clean:
+            raise ValueError("Topic is required.")
+        if not color_clean:
+            raise ValueError("Topic color is required.")
+
+        cursor = db.execute(
+            """
+            UPDATE questions
+            SET topic_color = ?
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+            """,
+            (color_clean, topic_clean),
+        )
+        db.commit()
+        return max(0, int(cursor.rowcount or 0))
+
     def delete_topic(self, topic: str) -> int:
         db = self._get_db()
         topic_clean = str(topic or "").strip()
@@ -502,6 +532,30 @@ class SQLiteQuestionRepository(QuestionRepository):
               AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
             """,
             (new_subtopic_clean, topic_clean, subtopic_clean),
+        )
+        db.commit()
+        return max(0, int(cursor.rowcount or 0))
+
+    def update_subtopic_color(self, topic: str, subtopic: str, color: str) -> int:
+        db = self._get_db()
+        topic_clean = str(topic or "").strip()
+        subtopic_clean = str(subtopic or "").strip()
+        color_clean = str(color or "").strip().lower()
+        if not topic_clean:
+            raise ValueError("Topic is required.")
+        if not subtopic_clean:
+            raise ValueError("Subtopic is required.")
+        if not color_clean:
+            raise ValueError("Subtopic color is required.")
+
+        cursor = db.execute(
+            """
+            UPDATE questions
+            SET subtopic_color = ?
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+              AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
+            """,
+            (color_clean, topic_clean, subtopic_clean),
         )
         db.commit()
         return max(0, int(cursor.rowcount or 0))

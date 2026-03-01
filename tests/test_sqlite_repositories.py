@@ -245,6 +245,28 @@ def test_question_repo_update_rename_and_delete_subtopic_flow(client):
     assert missing is None
 
 
+def test_question_repo_can_update_topic_and_subtopic_colors(client):
+    repo = SQLiteQuestionRepository()
+    insert_question(
+        "How do event loops schedule tasks?",
+        topic="Python",
+        subtopic="AsyncIO",
+        topic_color="blue",
+        subtopic_color="blue",
+    )
+
+    with flask_app.app_context():
+        topic_updated = repo.update_topic_color("python", "emerald")
+        subtopic_updated = repo.update_subtopic_color("python", "asyncio", "rose")
+        rows = list(repo.list_questions_by_subtopic("Python", "AsyncIO"))
+
+    assert topic_updated == 1
+    assert subtopic_updated == 1
+    assert len(rows) == 1
+    assert rows[0]["topic_color"] == "emerald"
+    assert rows[0]["subtopic_color"] == "rose"
+
+
 def test_question_repo_delete_topic_cleans_review_rows(client):
     question_repo = SQLiteQuestionRepository()
     feedback_repo = SQLiteFeedbackRepository()

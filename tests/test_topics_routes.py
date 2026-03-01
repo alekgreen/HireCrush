@@ -47,6 +47,23 @@ def test_topics_route_detail_filters_by_subtopic(client):
     assert "What is Terraform state locking?" not in body
 
 
+def test_questions_page_renders_topic_and_subtopic_with_different_colors(client):
+    insert_question(
+        "How do Kubernetes pods get scheduled?",
+        topic="devops",
+        subtopic="kubernetes",
+        topic_color="blue",
+        subtopic_color="rose",
+    )
+
+    res = client.get("/questions")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "--topic-text: #1d4ed8" in body
+    assert "--topic-text: #be123c" in body
+
+
 def test_topics_route_detail_formats_next_review_datetime(client):
     question_id = insert_question("Explain event sourcing.", topic="python")
     dt = datetime(2026, 3, 1, 16, 11, 1, tzinfo=timezone.utc)
@@ -82,6 +99,20 @@ def test_topics_route_can_rename_topic(client):
     assert "python-core" in body
 
 
+def test_topics_route_can_update_topic_color(client):
+    insert_question("Explain Python decorators.", topic="python", topic_color="blue")
+
+    response = client.post(
+        "/topics/edit",
+        data={"topic": "python", "new_topic": "python", "topic_color": "emerald", "next": "/topics?topic=python"},
+        follow_redirects=True,
+    )
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Updated topic color for 1 question(s)." in body
+
+
 def test_topics_route_can_rename_and_delete_subtopic(client):
     insert_question("How do Kubernetes pods get scheduled?", topic="devops", subtopic="kubernetes")
 
@@ -113,6 +144,32 @@ def test_topics_route_can_rename_and_delete_subtopic(client):
     assert delete_response.status_code == 200
     assert "Deleted 1 question(s) from subtopic." in delete_body
     assert "No questions found for this selection." in delete_body
+
+
+def test_topics_route_can_update_subtopic_color(client):
+    insert_question(
+        "How do Kubernetes pods get scheduled?",
+        topic="devops",
+        subtopic="kubernetes",
+        topic_color="blue",
+        subtopic_color="blue",
+    )
+
+    response = client.post(
+        "/subtopics/edit",
+        data={
+            "topic": "devops",
+            "subtopic": "kubernetes",
+            "new_subtopic": "kubernetes",
+            "subtopic_color": "rose",
+            "next": "/topics?topic=devops&subtopic=kubernetes",
+        },
+        follow_redirects=True,
+    )
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Updated subtopic color for 1 question(s)." in body
 
 
 def test_topics_route_can_edit_and_delete_question(client):

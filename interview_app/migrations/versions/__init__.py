@@ -8,6 +8,7 @@ from . import (
     v0004_add_subtopic,
     v0005_add_code_review,
     v0006_add_app_settings,
+    v0007_add_subtopic_color,
 )
 
 Migration = tuple[str, Callable[[sqlite3.Connection], None]]
@@ -19,4 +20,5 @@ MIGRATIONS: tuple[Migration, ...] = (
     (v0004_add_subtopic.VERSION, v0004_add_subtopic.apply),
     (v0005_add_code_review.VERSION, v0005_add_code_review.apply),
     (v0006_add_app_settings.VERSION, v0006_add_app_settings.apply),
+    (v0007_add_subtopic_color.VERSION, v0007_add_subtopic_color.apply),
 )

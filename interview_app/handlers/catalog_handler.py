@@ -1,5 +1,7 @@
 import sqlite3
 
+from interview_app.constants import TOPIC_TAG_COLOR_BY_CODE
+
 from .deps import CatalogHandlerDeps
 
 
@@ -11,6 +13,44 @@ def _build_topic_subtopics(subtopic_rows) -> dict[str, list]:
             continue
         grouped.setdefault(topic, []).append(row)
     return grouped
+
+
+def _normalize_color_code(value: str | None) -> str:
+    code = str(value or "").strip().lower()
+    if not code:
+        return ""
+    if code not in TOPIC_TAG_COLOR_BY_CODE:
+        return ""
+    return code
+
+
+def _resolve_topic_color(*, rows, subtopic_rows) -> str:
+    if rows:
+        color = _normalize_color_code(rows[0]["topic_color"] if "topic_color" in rows[0].keys() else "")
+        if color:
+            return color
+    if subtopic_rows:
+        color = _normalize_color_code(subtopic_rows[0]["topic_color"] if "topic_color" in subtopic_rows[0].keys() else "")
+        if color:
+            return color
+    return ""
+
+
+def _resolve_subtopic_color(*, selected_subtopic: str, rows, subtopic_rows) -> str:
+    selected_key = selected_subtopic.strip().lower()
+    if selected_key:
+        for row in subtopic_rows:
+            row_subtopic = str(row["subtopic"]).strip().lower()
+            if row_subtopic != selected_key:
+                continue
+            color = _normalize_color_code(row["subtopic_color"] if "subtopic_color" in row.keys() else "")
+            if color:
+                return color
+    if rows and selected_key:
+        color = _normalize_color_code(rows[0]["subtopic_color"] if "subtopic_color" in rows[0].keys() else "")
+        if color:
+            return color
+    return ""
 
 
 def questions_page(*, deps: CatalogHandlerDeps, render_template_fn):
@@ -33,6 +73,12 @@ def topics_page(*, deps: CatalogHandlerDeps, request_obj, render_template_fn):
             selected_subtopic=selected_subtopic,
             topic_questions=rows,
             topic_subtopics=_build_topic_subtopics(subtopic_rows),
+            selected_topic_color=_resolve_topic_color(rows=rows, subtopic_rows=subtopic_rows),
+            selected_subtopic_color=_resolve_subtopic_color(
+                selected_subtopic=selected_subtopic,
+                rows=rows,
+                subtopic_rows=subtopic_rows,
+            ),
         )
 
     rows = deps.list_topics_with_stats_fn(limit=200)
@@ -44,6 +90,8 @@ def topics_page(*, deps: CatalogHandlerDeps, request_obj, render_template_fn):
         selected_subtopic="",
         topic_questions=[],
         topic_subtopics=_build_topic_subtopics(subtopic_rows),
+        selected_topic_color="",
+        selected_subtopic_color="",
     )
 
 
@@ -134,21 +182,52 @@ def topic_rename_action(
 ):
     current_topic = _form_text(request_obj, "topic")
     new_topic = _form_text(request_obj, "new_topic")
+    next_topic = new_topic or current_topic
+    topic_color = _form_text(request_obj, "topic_color").lower()
     fallback_path = _resolve_next_path(
         request_obj=request_obj,
         url_for_fn=url_for_fn,
         fallback_endpoint="topics",
     )
+    if topic_color and topic_color not in TOPIC_TAG_COLOR_BY_CODE:
+        flash_fn("Topic tag color is invalid.", "error")
+        return redirect_fn(fallback_path)
+    if not deps.list_questions_by_topic_fn(current_topic, limit=1):
+        flash_fn("No topic was updated.", "error")
+        return redirect_fn(fallback_path)
+
+    renamed_count = 0
+    recolored_count = 0
     try:
-        updated = deps.rename_topic_fn(current_topic, new_topic)
+        if next_topic != current_topic:
+            renamed_count = deps.rename_topic_fn(current_topic, next_topic)
+        if topic_color:
+            recolored_count = deps.update_topic_color_fn(next_topic, topic_color)
     except ValueError as exc:
         flash_fn(str(exc), "error")
         return redirect_fn(fallback_path)
-    if updated <= 0:
+
+    if next_topic != current_topic and renamed_count <= 0 and not topic_color:
         flash_fn("No topic was updated.", "error")
         return redirect_fn(fallback_path)
-    flash_fn(f"Renamed topic for {updated} question(s).", "success")
-    return redirect_fn(url_for_fn("topics", topic=new_topic))
+
+    if next_topic != current_topic and topic_color:
+        flash_fn(
+            f"Renamed topic for {renamed_count} question(s) and updated color for {recolored_count} question(s).",
+            "success",
+        )
+    elif next_topic != current_topic:
+        flash_fn(f"Renamed topic for {renamed_count} question(s).", "success")
+    elif topic_color:
+        if recolored_count > 0:
+            flash_fn(f"Updated topic color for {recolored_count} question(s).", "success")
+        else:
+            flash_fn("Topic color unchanged.", "success")
+    else:
+        flash_fn("No topic changes were submitted.", "error")
+        return redirect_fn(fallback_path)
+
+    return redirect_fn(url_for_fn("topics", topic=next_topic))
 
 
 def topic_delete_action(
@@ -188,21 +267,52 @@ def subtopic_rename_action(
     topic = _form_text(request_obj, "topic")
     subtopic = _form_text(request_obj, "subtopic")
     new_subtopic = _form_text(request_obj, "new_subtopic")
+    next_subtopic = new_subtopic or subtopic
+    subtopic_color = _form_text(request_obj, "subtopic_color").lower()
     fallback_path = _resolve_next_path(
         request_obj=request_obj,
         url_for_fn=url_for_fn,
         fallback_endpoint="topics",
     )
+    if subtopic_color and subtopic_color not in TOPIC_TAG_COLOR_BY_CODE:
+        flash_fn("Subtopic tag color is invalid.", "error")
+        return redirect_fn(fallback_path)
+    if not deps.list_questions_by_subtopic_fn(topic, subtopic, limit=1):
+        flash_fn("No subtopic was updated.", "error")
+        return redirect_fn(fallback_path)
+
+    renamed_count = 0
+    recolored_count = 0
     try:
-        updated = deps.rename_subtopic_fn(topic, subtopic, new_subtopic)
+        if next_subtopic != subtopic:
+            renamed_count = deps.rename_subtopic_fn(topic, subtopic, next_subtopic)
+        if subtopic_color:
+            recolored_count = deps.update_subtopic_color_fn(topic, next_subtopic, subtopic_color)
     except ValueError as exc:
         flash_fn(str(exc), "error")
         return redirect_fn(fallback_path)
-    if updated <= 0:
+
+    if next_subtopic != subtopic and renamed_count <= 0 and not subtopic_color:
         flash_fn("No subtopic was updated.", "error")
         return redirect_fn(fallback_path)
-    flash_fn(f"Renamed subtopic for {updated} question(s).", "success")
-    return redirect_fn(url_for_fn("topics", topic=topic, subtopic=new_subtopic))
+
+    if next_subtopic != subtopic and subtopic_color:
+        flash_fn(
+            f"Renamed subtopic for {renamed_count} question(s) and updated color for {recolored_count} question(s).",
+            "success",
+        )
+    elif next_subtopic != subtopic:
+        flash_fn(f"Renamed subtopic for {renamed_count} question(s).", "success")
+    elif subtopic_color:
+        if recolored_count > 0:
+            flash_fn(f"Updated subtopic color for {recolored_count} question(s).", "success")
+        else:
+            flash_fn("Subtopic color unchanged.", "success")
+    else:
+        flash_fn("No subtopic changes were submitted.", "error")
+        return redirect_fn(fallback_path)
+
+    return redirect_fn(url_for_fn("topics", topic=topic, subtopic=next_subtopic))
 
 
 def subtopic_delete_action(

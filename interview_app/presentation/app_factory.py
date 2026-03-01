@@ -6,6 +6,7 @@ from flask import Flask
 from interview_app.constants import (
     DEFAULT_TOPIC_TAG_COLOR_CODE,
     GEMINI_SELECTABLE_MODELS,
+    TOPIC_TAG_COLORS,
     TOPIC_TAG_STYLE_BY_CODE,
 )
 from interview_app.db import close_db
@@ -35,6 +36,7 @@ def create_flask_app(import_name: str) -> Flask:
         return {
             "topic_tag_styles": TOPIC_TAG_STYLE_BY_CODE,
             "default_topic_tag_color": DEFAULT_TOPIC_TAG_COLOR_CODE,
+            "topic_tag_colors": TOPIC_TAG_COLORS,
         }
 
     return app

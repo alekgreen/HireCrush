@@ -14,6 +14,7 @@ EXPECTED_MIGRATIONS = [
     "0004_add_subtopic",
     "0005_add_code_review",
     "0006_add_app_settings",
+    "0007_add_subtopic_color",
 ]
 
 

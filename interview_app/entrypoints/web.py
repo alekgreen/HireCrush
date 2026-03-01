@@ -211,8 +211,10 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 update_question_fn=question_repository.update_question,
                 delete_question_fn=question_repository.delete_question,
                 rename_topic_fn=question_repository.rename_topic,
+                update_topic_color_fn=question_repository.update_topic_color,
                 delete_topic_fn=question_repository.delete_topic,
                 rename_subtopic_fn=question_repository.rename_subtopic,
+                update_subtopic_color_fn=question_repository.update_subtopic_color,
                 delete_subtopic_fn=question_repository.delete_subtopic,
             ),
             options=PresentationOptions(

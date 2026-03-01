@@ -18,16 +18,13 @@
 
   {% if selected_topic %}
     <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+      {% set selected_topic_style = topic_tag_styles.get(selected_topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+      {% set selected_subtopic_style = topic_tag_styles.get(selected_subtopic_color or selected_topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
       <div class="mb-4 flex flex-wrap items-center gap-2">
-        {% if topic_questions %}
-          {% set topic_style = topic_tag_styles.get(topic_questions[0].topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
-        {% else %}
-          {% set topic_style = topic_tag_styles[default_topic_tag_color] %}
-        {% endif %}
-        <span class="topic-tag rounded-full border px-2 py-0.5 text-xs font-semibold" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};">{{ selected_topic }}</span>
+        <span class="topic-tag rounded-full border px-2 py-0.5 text-xs font-semibold" style="--topic-border: {{ selected_topic_style.border }}; --topic-bg: {{ selected_topic_style.bg }}; --topic-text: {{ selected_topic_style.text }}; --topic-border-dark: {{ selected_topic_style.border_dark }}; --topic-bg-dark: {{ selected_topic_style.bg_dark }}; --topic-text-dark: {{ selected_topic_style.text_dark }};">{{ selected_topic }}</span>
         {% if selected_subtopic %}
           <span class="text-xs text-slate-400 dark:text-zinc-500">/</span>
-          <span class="topic-tag rounded-full border px-2 py-0.5 text-xs font-semibold" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};">{{ selected_subtopic }}</span>
+          <span class="topic-tag rounded-full border px-2 py-0.5 text-xs font-semibold" style="--topic-border: {{ selected_subtopic_style.border }}; --topic-bg: {{ selected_subtopic_style.bg }}; --topic-text: {{ selected_subtopic_style.text }}; --topic-border-dark: {{ selected_subtopic_style.border_dark }}; --topic-bg-dark: {{ selected_subtopic_style.bg_dark }}; --topic-text-dark: {{ selected_subtopic_style.text_dark }};">{{ selected_subtopic }}</span>
         {% endif %}
         <span class="text-sm text-slate-500 dark:text-zinc-400">{{ topic_questions|length }} question(s)</span>
         <a class="ml-auto rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics') }}">Back to all topics</a>
@@ -44,6 +41,12 @@
             <input type="hidden" name="topic" value="{{ selected_topic }}">
             <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-new-name">New topic name</label>
             <input id="topic-new-name" name="new_topic" value="{{ selected_topic }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+            <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-color">Topic tag color</label>
+            <select id="topic-color" name="topic_color" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+              {% for code, label in topic_tag_colors %}
+                <option value="{{ code }}" {% if code == (selected_topic_color or default_topic_tag_color) %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
             <div class="mt-2 flex items-center justify-end gap-2">
               <button type="button" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" onclick="document.getElementById('edit-topic-selected').close()">Cancel</button>
               <button type="submit" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600">Save topic</button>
@@ -62,13 +65,15 @@
         <div class="mb-3 flex flex-wrap items-center gap-2">
           <a class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('topics', topic=selected_topic) }}">All subtopics</a>
           {% for subtopic in selected_topic_subtopics %}
-            <a class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }} ({{ subtopic.total_questions }})</a>
+            {% set subtopic_style = topic_tag_styles.get(subtopic.subtopic_color or subtopic.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+            <a class="topic-tag rounded-md border px-2.5 py-1 text-xs font-semibold no-underline" style="--topic-border: {{ subtopic_style.border }}; --topic-bg: {{ subtopic_style.bg }}; --topic-text: {{ subtopic_style.text }}; --topic-border-dark: {{ subtopic_style.border_dark }}; --topic-bg-dark: {{ subtopic_style.bg_dark }}; --topic-text-dark: {{ subtopic_style.text_dark }};" href="{{ url_for('topics', topic=selected_topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }} ({{ subtopic.total_questions }})</a>
           {% endfor %}
         </div>
         <div class="mb-4 grid gap-2">
           {% for subtopic in selected_topic_subtopics %}
             <div class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/70">
-              <a class="font-semibold text-slate-700 hover:underline dark:text-zinc-100" href="{{ url_for('topics', topic=selected_topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }}</a>
+              {% set subtopic_style = topic_tag_styles.get(subtopic.subtopic_color or subtopic.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+              <a class="topic-tag rounded-full border px-2 py-0.5 font-semibold no-underline" style="--topic-border: {{ subtopic_style.border }}; --topic-bg: {{ subtopic_style.bg }}; --topic-text: {{ subtopic_style.text }}; --topic-border-dark: {{ subtopic_style.border_dark }}; --topic-bg-dark: {{ subtopic_style.bg_dark }}; --topic-text-dark: {{ subtopic_style.text_dark }};" href="{{ url_for('topics', topic=selected_topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }}</a>
               <span class="text-slate-500 dark:text-zinc-400">{{ subtopic.total_questions }} question(s)</span>
             </div>
           {% endfor %}
@@ -89,6 +94,12 @@
               <input type="hidden" name="subtopic" value="{{ selected_subtopic }}">
               <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="selected-subtopic-new">New subtopic name</label>
               <input id="selected-subtopic-new" name="new_subtopic" value="{{ selected_subtopic }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+              <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="selected-subtopic-color">Subtopic tag color</label>
+              <select id="selected-subtopic-color" name="subtopic_color" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                {% for code, label in topic_tag_colors %}
+                  <option value="{{ code }}" {% if code == (selected_subtopic_color or selected_topic_color or default_topic_tag_color) %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
               <div class="mt-2 flex items-center justify-end gap-2">
                 <button type="button" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" onclick="document.getElementById('edit-selected-subtopic').close()">Cancel</button>
                 <button type="submit" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600">Save subtopic</button>
@@ -161,7 +172,8 @@
               {% if subtopics %}
                 <div class="mt-2 flex flex-wrap gap-1.5">
                   {% for subtopic in subtopics %}
-                    <a class="rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=topic.topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }} ({{ subtopic.total_questions }})</a>
+                    {% set subtopic_style = topic_tag_styles.get(subtopic.subtopic_color or subtopic.topic_color or topic.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
+                    <a class="topic-tag rounded-md border px-2 py-0.5 text-[11px] font-semibold no-underline" style="--topic-border: {{ subtopic_style.border }}; --topic-bg: {{ subtopic_style.bg }}; --topic-text: {{ subtopic_style.text }}; --topic-border-dark: {{ subtopic_style.border_dark }}; --topic-bg-dark: {{ subtopic_style.bg_dark }}; --topic-text-dark: {{ subtopic_style.text_dark }};" href="{{ url_for('topics', topic=topic.topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }} ({{ subtopic.total_questions }})</a>
                   {% endfor %}
                 </div>
               {% endif %}

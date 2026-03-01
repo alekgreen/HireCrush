@@ -82,9 +82,9 @@ def add_questions(
             db.execute(
                 """
                 INSERT INTO questions (
-                    text, text_hash, topic, subtopic, topic_color, created_at, next_review_at,
+                    text, text_hash, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at,
                     suggested_answer, repetitions, interval_days, ease_factor
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
                 """,
                 (
                     text,
@@ -92,6 +92,7 @@ def add_questions(
                     topic,
                     subtopic,
                     topic_color,
+                    topic_color if subtopic else None,
                     iso_fn(now),
                     iso_fn(now),
                     suggested_answer,
@@ -188,10 +189,10 @@ def add_code_review_questions(
             db.execute(
                 """
                 INSERT INTO questions (
-                    text, text_hash, topic, subtopic, topic_color, created_at, next_review_at,
+                    text, text_hash, topic, subtopic, topic_color, subtopic_color, created_at, next_review_at,
                     suggested_answer, repetitions, interval_days, ease_factor,
                     question_type, code_snippet, code_language
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 2.5, 'code_review', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 2.5, 'code_review', ?, ?)
                 """,
                 (
                     question_text,
@@ -199,6 +200,7 @@ def add_code_review_questions(
                     topic,
                     subtopic,
                     topic_color,
+                    topic_color if subtopic else None,
                     iso_fn(now),
                     iso_fn(now),
                     code_snippet,
