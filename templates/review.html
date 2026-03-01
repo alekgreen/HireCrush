@@ -37,7 +37,7 @@
 
   {% if question %}
     <div class="grid gap-4 lg:grid-cols-5">
-      <div class="space-y-4 lg:col-span-3">
+      <div class="space-y-4 lg:col-span-3" id="review-main-col">
         <article class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
           {% if question.question_type == 'code_review' %}
             <span class="mb-3 inline-flex items-center gap-1 rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Code Review</span>
@@ -83,7 +83,10 @@
 
         <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
           {% if question.question_type == 'code_review' %}
-            <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100">Your Code Review</h3>
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100">Your Code Review</h3>
+              <button type="button" id="editor-expand-btn" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700" title="Expand editor to full width"><span id="editor-expand-label">⤢ Expand</span></button>
+            </div>
             <p class="mt-1 text-sm text-slate-500 dark:text-zinc-400">Edit the code below to fix the issues and add comments explaining your changes. Then submit for Gemini feedback.</p>
             <form class="mt-3 space-y-3" method="post" action="{{ url_for('review_feedback', question_id=question.id) }}" id="code-review-form">
               {% for topic in selected_topics %}
@@ -181,7 +184,7 @@
         </form>
       </div>
 
-      <aside class="lg:col-span-2">
+      <aside class="lg:col-span-2" id="review-sidebar">
         {% if latest_feedback %}
           <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
             <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100">Latest Feedback</h3>
@@ -309,6 +312,22 @@
         editor.setOption("theme", dark ? "monokai" : "default");
       });
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+      // Expand/collapse editor to full width
+      const expandBtn = document.getElementById("editor-expand-btn");
+      const mainCol = document.getElementById("review-main-col");
+      const sidebar = document.getElementById("review-sidebar");
+      if (expandBtn && mainCol && sidebar) {
+        let expanded = false;
+        expandBtn.addEventListener("click", () => {
+          expanded = !expanded;
+          mainCol.classList.toggle("lg:col-span-3", !expanded);
+          mainCol.classList.toggle("lg:col-span-5", expanded);
+          sidebar.classList.toggle("hidden", expanded);
+          document.getElementById("editor-expand-label").textContent = expanded ? "⤡ Collapse" : "⤢ Expand";
+          requestAnimationFrame(() => editor.refresh());
+        });
+      }
     })();
   </script>
 {% endif %}
