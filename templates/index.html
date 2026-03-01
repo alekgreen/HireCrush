@@ -9,9 +9,9 @@
       <p class="text-sm text-slate-600 dark:text-zinc-300">Total questions</p>
       <p class="mt-1 text-3xl font-bold text-slate-900 dark:text-zinc-100">{{ stats.total }}</p>
     </article>
-    <article class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-      <p class="text-sm text-amber-700 dark:text-amber-200">Due now</p>
-      <p class="mt-1 text-3xl font-bold text-amber-800 dark:text-amber-100">{{ stats.due }}</p>
+    <article class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/30">
+      <p class="text-sm text-emerald-700 dark:text-emerald-200">Due now</p>
+      <p class="mt-1 text-3xl font-bold text-emerald-800 dark:text-emerald-100">{{ stats.due }}</p>
     </article>
   </div>
 
@@ -31,9 +31,9 @@
         <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
           {% set topic_style = topic_tag_styles.get(q.topic_color or default_topic_tag_color, topic_tag_styles[default_topic_tag_color]) %}
           {% if q.topic %}
-            <a class="rounded-full border px-2 py-0.5 font-semibold no-underline" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};" href="{{ url_for('topics', topic=q.topic) }}">{{ q.topic }}</a>
+            <a class="topic-tag rounded-full border px-2 py-0.5 font-semibold no-underline" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};" href="{{ url_for('topics', topic=q.topic) }}">{{ q.topic }}</a>
           {% else %}
-            <span class="rounded-full border px-2 py-0.5 font-semibold" style="border-color: {{ topic_style.border }}; background-color: {{ topic_style.bg }}; color: {{ topic_style.text }};">General</span>
+            <span class="topic-tag rounded-full border px-2 py-0.5 font-semibold" style="--topic-border: {{ topic_style.border }}; --topic-bg: {{ topic_style.bg }}; --topic-text: {{ topic_style.text }}; --topic-border-dark: {{ topic_style.border_dark }}; --topic-bg-dark: {{ topic_style.bg_dark }}; --topic-text-dark: {{ topic_style.text_dark }};">General</span>
           {% endif %}
           <span>Added: {{ q.created_at }}</span>
         </div>

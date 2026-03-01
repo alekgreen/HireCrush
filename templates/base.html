@@ -22,9 +22,9 @@
             ink: "#0f172a",
             mist: "#d9e0ea",
             brand: {
-              50: "#e9f2ff",
-              500: "#2f5fd6",
-              600: "#244fb7"
+              50: "#ecfdf5",
+              500: "#16a34a",
+              600: "#15803d"
             }
           },
           boxShadow: {
@@ -67,32 +67,44 @@
     }
 
     html.dark .bg-brand-500 {
-      background-color: #0f766e !important;
-      border-color: #0f766e !important;
+      background-color: #16a34a !important;
+      border-color: #16a34a !important;
     }
 
     html.dark .hover\:bg-brand-600:hover {
-      background-color: #115e59 !important;
+      background-color: #15803d !important;
     }
 
     html.dark .border-brand-500 {
-      border-color: #14b8a6 !important;
+      border-color: #22c55e !important;
     }
 
     html.dark .text-brand-500 {
-      color: #14b8a6 !important;
+      color: #22c55e !important;
     }
 
     html.dark .focus\:border-brand-500:focus {
-      border-color: #14b8a6 !important;
+      border-color: #22c55e !important;
     }
 
     html.dark .focus\:ring-brand-100:focus {
-      --tw-ring-color: rgb(20 184 166 / 0.28) !important;
+      --tw-ring-color: rgb(34 197 94 / 0.28) !important;
     }
 
     html.dark .focus\:ring-brand-500:focus {
-      --tw-ring-color: rgb(20 184 166 / 0.45) !important;
+      --tw-ring-color: rgb(34 197 94 / 0.45) !important;
+    }
+
+    .topic-tag {
+      border-color: var(--topic-border);
+      background-color: var(--topic-bg);
+      color: var(--topic-text);
+    }
+
+    html.dark .topic-tag {
+      border-color: var(--topic-border-dark, var(--topic-border));
+      background-color: var(--topic-bg-dark, var(--topic-bg));
+      color: var(--topic-text-dark, var(--topic-text));
     }
   </style>
 </head>
@@ -127,9 +139,9 @@
               {% if category == 'success' %}
                 border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200
               {% elif category == 'error' %}
-                border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200
+                border-zinc-300 bg-zinc-100 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100
               {% else %}
-                border-blue-200 bg-blue-50 text-blue-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200
+                border-slate-300 bg-slate-100 text-slate-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100
               {% endif %}
             ">{{ message }}</div>
           {% endfor %}

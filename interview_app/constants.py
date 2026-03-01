@@ -55,12 +55,54 @@ TOPIC_TAG_COLORS = [
 DEFAULT_TOPIC_TAG_COLOR_CODE = "blue"
 TOPIC_TAG_COLOR_BY_CODE = {code: label for code, label in TOPIC_TAG_COLORS}
 TOPIC_TAG_STYLE_BY_CODE = {
-    "blue": {"border": "#bfdbfe", "bg": "#eff6ff", "text": "#1d4ed8"},
-    "emerald": {"border": "#a7f3d0", "bg": "#ecfdf5", "text": "#047857"},
-    "amber": {"border": "#fcd34d", "bg": "#fffbeb", "text": "#b45309"},
-    "rose": {"border": "#fecdd3", "bg": "#fff1f2", "text": "#be123c"},
-    "violet": {"border": "#ddd6fe", "bg": "#f5f3ff", "text": "#6d28d9"},
-    "slate": {"border": "#cbd5e1", "bg": "#f8fafc", "text": "#334155"},
+    "blue": {
+        "border": "#bfdbfe",
+        "bg": "#eff6ff",
+        "text": "#1d4ed8",
+        "border_dark": "#1d4ed8",
+        "bg_dark": "#172554",
+        "text_dark": "#bfdbfe",
+    },
+    "emerald": {
+        "border": "#a7f3d0",
+        "bg": "#ecfdf5",
+        "text": "#047857",
+        "border_dark": "#10b981",
+        "bg_dark": "#022c22",
+        "text_dark": "#a7f3d0",
+    },
+    "amber": {
+        "border": "#fcd34d",
+        "bg": "#fffbeb",
+        "text": "#b45309",
+        "border_dark": "#f59e0b",
+        "bg_dark": "#451a03",
+        "text_dark": "#fde68a",
+    },
+    "rose": {
+        "border": "#fecdd3",
+        "bg": "#fff1f2",
+        "text": "#be123c",
+        "border_dark": "#e11d48",
+        "bg_dark": "#4c0519",
+        "text_dark": "#fecdd3",
+    },
+    "violet": {
+        "border": "#ddd6fe",
+        "bg": "#f5f3ff",
+        "text": "#6d28d9",
+        "border_dark": "#8b5cf6",
+        "bg_dark": "#2e1065",
+        "text_dark": "#ddd6fe",
+    },
+    "slate": {
+        "border": "#cbd5e1",
+        "bg": "#f8fafc",
+        "text": "#334155",
+        "border_dark": "#64748b",
+        "bg_dark": "#0f172a",
+        "text_dark": "#cbd5e1",
+    },
 }
 
 QUESTIONS_JSON_SCHEMA = {
