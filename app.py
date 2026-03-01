@@ -1,17 +1,9 @@
 import os
+import sys
 
 import requests
-from dotenv import load_dotenv
-from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask import redirect, request, url_for
 
-from interview_app.handlers import catalog_handler, generation_handler, home_handler, review_handler
-from interview_app.handlers.deps import HandlerDeps
-from interview_app.services import (
-    gemini_service,
-    generation_service,
-    question_service,
-    review_service,
-)
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
@@ -23,9 +15,11 @@ from interview_app.constants import (
     QUESTIONS_JSON_SCHEMA,
     TOPIC_TAG_COLORS,
     TOPIC_TAG_COLOR_BY_CODE,
-    TOPIC_TAG_STYLE_BY_CODE,
 )
-from interview_app.db import close_db, get_db, init_db
+from interview_app.db import get_db, init_db
+from interview_app.presentation.app_factory import create_flask_app
+from interview_app.presentation.deps_factory import build_handler_deps_from_namespace
+from interview_app.presentation.routes import register_routes
 from interview_app.repository import (
     get_due_question,
     get_existing_topics,
@@ -41,6 +35,12 @@ from interview_app.repository import (
     list_topics_with_stats,
     save_feedback,
 )
+from interview_app.services import (
+    gemini_service,
+    generation_service,
+    question_service,
+    review_service,
+)
 from interview_app.utils import (
     clean_question_text,
     iso,
@@ -51,28 +51,10 @@ from interview_app.utils import (
     question_hash,
 )
 
-load_dotenv()
-
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
-app.config["DATABASE"] = os.getenv("DATABASE_PATH", "interview.db")
-app.config["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
-app.config["GEMINI_MODEL"] = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-app.config["AUTO_GENERATE_ANSWERS"] = (
-    os.getenv("AUTO_GENERATE_ANSWERS", "true").strip().lower() in {"1", "true", "yes", "on"}
-)
-app.teardown_appcontext(close_db)
+app = create_flask_app(__name__)
 
 SUPPORTED_AUDIO_MIME_TYPES = gemini_service.SUPPORTED_AUDIO_MIME_TYPES
 MAX_INLINE_AUDIO_BYTES = gemini_service.MAX_INLINE_AUDIO_BYTES
-
-
-@app.context_processor
-def inject_topic_tag_style():
-    return {
-        "topic_tag_styles": TOPIC_TAG_STYLE_BY_CODE,
-        "default_topic_tag_color": DEFAULT_TOPIC_TAG_COLOR_CODE,
-    }
 
 
 def gemini_model_candidates() -> list[str]:
@@ -97,8 +79,7 @@ def gemini_generate_json(prompt: str, response_schema: dict, temperature: float 
     return parsed
 
 
-def normalize_audio_mime_type(mime_type: str) -> str | None:
-    return gemini_service.normalize_audio_mime_type(mime_type)
+normalize_audio_mime_type = gemini_service.normalize_audio_mime_type
 
 
 def call_gemini_for_transcription(audio_bytes: bytes, mime_type: str) -> str:
@@ -187,8 +168,7 @@ def generate_answer_for_question(question_id: int) -> str:
     )
 
 
-def format_http_error(exc: requests.HTTPError) -> str:
-    return question_service.format_http_error(exc)
+format_http_error = question_service.format_http_error
 
 
 def apply_review(question_id: int, rating: int) -> None:
@@ -201,12 +181,8 @@ def apply_review(question_id: int, rating: int) -> None:
     )
 
 
-def normalize_topic_filters(raw_values: list[str]) -> list[str]:
-    return review_service.normalize_topic_filters(raw_values)
-
-
-def is_randomized_review(value: str) -> bool:
-    return review_service.is_randomized_review(value)
+normalize_topic_filters = review_service.normalize_topic_filters
+is_randomized_review = review_service.is_randomized_review
 
 
 def review_redirect(
@@ -234,140 +210,11 @@ def extract_review_filters_from_referrer() -> tuple[list[str], bool]:
     return review_service.extract_review_filters_from_referrer(request.referrer or "")
 
 
-def build_handler_deps() -> HandlerDeps:
-    return HandlerDeps(
-        get_stats_fn=get_stats,
-        get_recent_questions_fn=get_recent_questions,
-        get_existing_topics_fn=get_existing_topics,
-        add_questions_fn=add_questions,
-        format_http_error_fn=format_http_error,
-        get_recent_topic_color_fn=get_recent_topic_color,
-        get_question_by_id_fn=get_question_by_id,
-        get_due_question_fn=get_due_question,
-        get_next_upcoming_fn=get_next_upcoming,
-        get_latest_feedback_fn=get_latest_feedback,
-        apply_review_fn=apply_review,
-        normalize_topic_filters_fn=normalize_topic_filters,
-        is_randomized_review_fn=is_randomized_review,
-        extract_review_filters_from_referrer_fn=extract_review_filters_from_referrer,
-        review_redirect_fn=review_redirect,
-        generate_answer_for_question_fn=generate_answer_for_question,
-        call_gemini_for_feedback_fn=call_gemini_for_feedback,
-        save_feedback_fn=save_feedback,
-        normalize_audio_mime_type_fn=normalize_audio_mime_type,
-        call_gemini_for_transcription_fn=call_gemini_for_transcription,
-        list_questions_fn=list_questions,
-        list_questions_by_topic_fn=list_questions_by_topic,
-        list_topics_with_stats_fn=list_topics_with_stats,
-        default_generation_language_code=DEFAULT_GENERATION_LANGUAGE_CODE,
-        generation_language_by_code=GENERATION_LANGUAGE_BY_CODE,
-        generation_languages=GENERATION_LANGUAGES,
-        topic_tag_colors=TOPIC_TAG_COLORS,
-        topic_tag_color_by_code=TOPIC_TAG_COLOR_BY_CODE,
-        default_topic_tag_color_code=DEFAULT_TOPIC_TAG_COLOR_CODE,
-        max_inline_audio_bytes=MAX_INLINE_AUDIO_BYTES,
-    )
+def build_handler_deps():
+    return build_handler_deps_from_namespace(sys.modules[__name__])
 
 
-@app.route("/")
-def index():
-    return home_handler.index_page(
-        deps=build_handler_deps(),
-        render_template_fn=render_template,
-    )
-
-
-@app.route("/generate", methods=["GET", "POST"])
-def generate():
-    return generation_handler.generate_page(
-        deps=build_handler_deps(),
-        request_obj=request,
-        flash_fn=flash,
-        redirect_fn=redirect,
-        url_for_fn=url_for,
-        render_template_fn=render_template,
-    )
-
-
-@app.route("/review", methods=["GET"])
-def review():
-    return review_handler.review_page(
-        deps=build_handler_deps(),
-        request_obj=request,
-        render_template_fn=render_template,
-    )
-
-
-@app.route("/review/<int:question_id>", methods=["POST"])
-def review_submit(question_id: int):
-    return review_handler.review_submit_action(
-        deps=build_handler_deps(),
-        question_id=question_id,
-        request_obj=request,
-        flash_fn=flash,
-        redirect_fn=redirect,
-        url_for_fn=url_for,
-    )
-
-
-@app.route("/review/<int:question_id>/skip", methods=["POST"])
-def review_skip(question_id: int):
-    return review_handler.review_skip_action(
-        deps=build_handler_deps(),
-        question_id=question_id,
-        request_obj=request,
-    )
-
-
-@app.route("/review/<int:question_id>/answer", methods=["POST"])
-def review_answer(question_id: int):
-    return review_handler.review_answer_action(
-        deps=build_handler_deps(),
-        question_id=question_id,
-        request_obj=request,
-        flash_fn=flash,
-        redirect_fn=redirect,
-        url_for_fn=url_for,
-    )
-
-
-@app.route("/review/<int:question_id>/feedback", methods=["POST"])
-def review_feedback(question_id: int):
-    return review_handler.review_feedback_action(
-        deps=build_handler_deps(),
-        question_id=question_id,
-        request_obj=request,
-        flash_fn=flash,
-        redirect_fn=redirect,
-        url_for_fn=url_for,
-    )
-
-
-@app.route("/review/transcribe", methods=["POST"])
-def review_transcribe():
-    return review_handler.review_transcribe_action(
-        deps=build_handler_deps(),
-        request_obj=request,
-        jsonify_fn=jsonify,
-    )
-
-
-@app.route("/questions")
-def questions():
-    return catalog_handler.questions_page(
-        deps=build_handler_deps(),
-        render_template_fn=render_template,
-    )
-
-
-@app.route("/topics")
-def topics():
-    return catalog_handler.topics_page(
-        deps=build_handler_deps(),
-        request_obj=request,
-        render_template_fn=render_template,
-    )
-
+register_routes(app, build_handler_deps)
 
 with app.app_context():
     init_db()
