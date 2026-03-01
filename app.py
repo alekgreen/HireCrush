@@ -510,6 +510,11 @@ def generate():
 @app.route("/review", methods=["GET"])
 def review():
     requested_qid = request.args.get("qid", type=int)
+    show_feedback = str(request.args.get("show_feedback", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     question = get_question_by_id(requested_qid) if requested_qid else None
     if question is None:
         question = get_due_question()
@@ -519,7 +524,7 @@ def review():
     latest_feedback = None
     if question is None:
         upcoming = get_next_upcoming()
-    else:
+    elif show_feedback:
         latest_feedback = get_latest_feedback(question["id"])
 
     return render_template(
@@ -574,6 +579,7 @@ def review_feedback(question_id: int):
         flash("Please enter a longer answer to get meaningful feedback.", "error")
         return redirect(url_for("review", qid=question_id))
 
+    show_feedback = False
     try:
         reference_answer = generate_answer_for_question(question_id)
         result = call_gemini_for_feedback(
@@ -582,12 +588,15 @@ def review_feedback(question_id: int):
             user_answer=user_answer,
         )
         save_feedback(question_id, user_answer, result)
+        show_feedback = True
         flash("Feedback generated.", "success")
     except requests.HTTPError as exc:
         flash(format_http_error(exc), "error")
     except Exception as exc:
         flash(f"Could not evaluate answer: {exc}", "error")
 
+    if show_feedback:
+        return redirect(url_for("review", qid=question_id, show_feedback=1))
     return redirect(url_for("review", qid=question_id))
 
 

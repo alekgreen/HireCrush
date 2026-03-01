@@ -387,6 +387,86 @@ def test_review_feedback_route_stores_feedback(monkeypatch, client):
     assert "ACID guarantees" in row["improved_answer"]
 
 
+def test_review_route_hides_latest_feedback_by_default(client):
+    question_id = insert_question(
+        "How does transaction isolation work?",
+        suggested_answer="Isolation keeps concurrent transactions from interfering.",
+    )
+    with app_module.app.app_context():
+        app_module.save_feedback(
+            question_id,
+            "It prevents concurrency bugs.",
+            {
+                "score": 6,
+                "feedback": "Decent answer, add concrete isolation levels.",
+                "improved_answer": "Isolation controls visibility between concurrent transactions.",
+                "strengths": ["Mentions concurrency"],
+                "gaps": ["No isolation level examples"],
+            },
+        )
+
+    res = client.get(f"/review?qid={question_id}")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Latest Feedback" not in body
+    assert "Decent answer, add concrete isolation levels." not in body
+    assert "Submit your answer to generate structured feedback and an improved response." in body
+
+
+def test_review_route_shows_latest_feedback_with_flag(client):
+    question_id = insert_question(
+        "What is optimistic locking?",
+        suggested_answer="Optimistic locking checks version conflicts at write time.",
+    )
+    with app_module.app.app_context():
+        app_module.save_feedback(
+            question_id,
+            "It uses a version field to detect conflicts.",
+            {
+                "score": 8,
+                "feedback": "Good explanation with correct conflict detection idea.",
+                "improved_answer": "Optimistic locking detects write conflicts by comparing versions.",
+                "strengths": ["Version check noted"],
+                "gaps": [],
+            },
+        )
+
+    res = client.get(f"/review?qid={question_id}&show_feedback=1")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Latest Feedback" in body
+    assert "Good explanation with correct conflict detection idea." in body
+
+
+def test_review_feedback_redirect_includes_show_feedback_flag(monkeypatch, client):
+    question_id = insert_question(
+        "Why use indexes in databases?",
+        suggested_answer="Indexes speed reads by reducing scanned rows.",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "call_gemini_for_feedback",
+        lambda **_kwargs: {
+            "score": 7,
+            "feedback": "Solid base answer.",
+            "improved_answer": "Indexes accelerate lookups by narrowing search paths.",
+            "strengths": [],
+            "gaps": [],
+        },
+    )
+
+    res = client.post(
+        f"/review/{question_id}/feedback",
+        data={"user_answer": "Indexes can make queries faster by avoiding full scans."},
+        follow_redirects=False,
+    )
+
+    assert res.status_code == 302
+    assert f"/review?qid={question_id}&show_feedback=1" in res.headers["Location"]
+
+
 def test_call_gemini_for_transcription_uses_audio_payload_and_falls_back_model(monkeypatch, client):
     class FakeResponse:
         def __init__(self, status_code, payload=None):
