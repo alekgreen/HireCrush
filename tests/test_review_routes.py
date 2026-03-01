@@ -8,6 +8,7 @@ from interview_app.adapters.persistence.sqlite.repositories import (
 )
 from interview_app.db import get_db
 from interview_app.services import question_service
+from interview_app.utils import serialize_topic_subtopic
 
 from tests.support import insert_question
 
@@ -45,6 +46,27 @@ def test_review_route_filters_due_question_by_selected_topics(client):
     assert res.status_code == 200
     assert "Explain Python&#39;s GIL." in body
     assert "What is a SQL index?" not in body
+
+
+def test_review_route_filters_due_question_by_selected_subtopics(client):
+    insert_question(
+        "How do Kubernetes probes work?",
+        topic="devops",
+        subtopic="kubernetes",
+    )
+    insert_question(
+        "How does Terraform plan differ from apply?",
+        topic="devops",
+        subtopic="terraform",
+    )
+
+    subtopic_filter = serialize_topic_subtopic("devops", "kubernetes")
+    res = client.get(f"/review?subtopics={subtopic_filter}")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "How do Kubernetes probes work?" in body
+    assert "How does Terraform plan differ from apply?" not in body
 
 
 def test_review_route_shows_reappearance_hints_for_grade_buttons(client, override_handler_deps):

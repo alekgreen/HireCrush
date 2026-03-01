@@ -124,6 +124,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
 
     def review_redirect(
         topics: list[str] | None = None,
+        subtopics: list[tuple[str, str]] | None = None,
         randomize: bool = False,
         qid: int | None = None,
         show_feedback: bool = False,
@@ -131,6 +132,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     ):
         return runtime.review_redirect(
             topics=topics,
+            subtopics=subtopics,
             randomize=randomize,
             qid=qid,
             show_feedback=show_feedback,
@@ -139,7 +141,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
             url_for_fn=url_for,
         )
 
-    def extract_review_filters_from_referrer() -> tuple[list[str], bool]:
+    def extract_review_filters_from_referrer() -> tuple[list[str], list[tuple[str, str]], bool]:
         return runtime.extract_review_filters_from_referrer(request.referrer or "")
 
     default_handler_deps_bundle = build_handler_deps_bundle(
@@ -148,12 +150,14 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 get_stats_fn=question_repository.get_stats,
                 get_recent_questions_fn=question_repository.get_recent_questions,
                 get_existing_topics_fn=question_repository.get_existing_topics,
+                list_topic_subtopics_fn=question_repository.list_topic_subtopics,
             ),
             generation=GenerationFlowInputs(
                 add_questions_fn=runtime.add_questions,
                 format_http_error_fn=runtime.format_http_error,
                 get_recent_topic_color_fn=question_repository.get_recent_topic_color,
                 get_existing_topics_fn=question_repository.get_existing_topics,
+                list_topic_subtopics_fn=question_repository.list_topic_subtopics,
             ),
             review=ReviewFlowInputs(
                 get_question_by_id_fn=question_repository.get_question_by_id,
@@ -164,6 +168,8 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 get_stats_fn=question_repository.get_stats,
                 apply_review_fn=runtime.apply_review,
                 normalize_topic_filters_fn=runtime.normalize_topic_filters,
+                normalize_subtopic_filters_fn=runtime.normalize_subtopic_filters,
+                serialize_topic_subtopic_filter_fn=runtime.serialize_topic_subtopic_filter,
                 is_randomized_review_fn=runtime.is_randomized_review,
                 extract_review_filters_from_referrer_fn=extract_review_filters_from_referrer,
                 review_redirect_fn=review_redirect,
@@ -176,7 +182,9 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
             catalog=CatalogQueryInputs(
                 list_questions_fn=question_repository.list_questions,
                 list_questions_by_topic_fn=question_repository.list_questions_by_topic,
+                list_questions_by_subtopic_fn=question_repository.list_questions_by_subtopic,
                 list_topics_with_stats_fn=question_repository.list_topics_with_stats,
+                list_subtopics_with_stats_fn=question_repository.list_subtopics_with_stats,
             ),
             options=PresentationOptions(
                 default_generation_language_code=DEFAULT_GENERATION_LANGUAGE_CODE,

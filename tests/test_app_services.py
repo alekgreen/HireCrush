@@ -46,6 +46,7 @@ def test_add_questions_skips_duplicates_and_short(client):
     with flask_app.app_context():
         inserted, remaining = question_service.add_questions(
             topic="backend",
+            subtopic=None,
             requested_count=2,
             language="English",
             additional_context=None,
@@ -82,6 +83,7 @@ def test_add_questions_returns_unfilled_when_not_enough_unique(client):
     with flask_app.app_context():
         inserted, remaining = question_service.add_questions(
             topic="python",
+            subtopic=None,
             requested_count=3,
             language="English",
             additional_context=None,

@@ -16,6 +16,7 @@ class HomeQueryInputs:
     get_stats_fn: Callable[[], dict]
     get_recent_questions_fn: Callable[..., Any]
     get_existing_topics_fn: Callable[..., list[str]]
+    list_topic_subtopics_fn: Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class GenerationFlowInputs:
     format_http_error_fn: Callable[..., str]
     get_recent_topic_color_fn: Callable[[str], str | None]
     get_existing_topics_fn: Callable[..., list[str]]
+    list_topic_subtopics_fn: Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -36,8 +38,13 @@ class ReviewFlowInputs:
     get_stats_fn: Callable[[], dict]
     apply_review_fn: Callable[[int, int], None]
     normalize_topic_filters_fn: Callable[[list[str]], list[str]]
+    normalize_subtopic_filters_fn: Callable[[list[str]], list[tuple[str, str]]]
+    serialize_topic_subtopic_filter_fn: Callable[[str, str], str]
     is_randomized_review_fn: Callable[[str], bool]
-    extract_review_filters_from_referrer_fn: Callable[[], tuple[list[str], bool]]
+    extract_review_filters_from_referrer_fn: Callable[
+        [],
+        tuple[list[str], list[tuple[str, str]], bool],
+    ]
     review_redirect_fn: Callable[..., Any]
     generate_answer_for_question_fn: Callable[[int], str]
     call_gemini_for_feedback_fn: Callable[..., dict]
@@ -50,7 +57,9 @@ class ReviewFlowInputs:
 class CatalogQueryInputs:
     list_questions_fn: Callable[..., Any]
     list_questions_by_topic_fn: Callable[..., Any]
+    list_questions_by_subtopic_fn: Callable[..., Any]
     list_topics_with_stats_fn: Callable[..., Any]
+    list_subtopics_with_stats_fn: Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -82,12 +91,14 @@ def build_handler_deps_bundle(
             get_stats_fn=inputs.home.get_stats_fn,
             get_recent_questions_fn=inputs.home.get_recent_questions_fn,
             get_existing_topics_fn=inputs.home.get_existing_topics_fn,
+            list_topic_subtopics_fn=inputs.home.list_topic_subtopics_fn,
         ),
         generation=GenerationHandlerDeps(
             add_questions_fn=inputs.generation.add_questions_fn,
             format_http_error_fn=inputs.generation.format_http_error_fn,
             get_recent_topic_color_fn=inputs.generation.get_recent_topic_color_fn,
             get_existing_topics_fn=inputs.generation.get_existing_topics_fn,
+            list_topic_subtopics_fn=inputs.generation.list_topic_subtopics_fn,
             default_generation_language_code=inputs.options.default_generation_language_code,
             generation_language_by_code=inputs.options.generation_language_by_code,
             generation_languages=inputs.options.generation_languages,
@@ -104,6 +115,8 @@ def build_handler_deps_bundle(
             get_review_reappearance_labels_fn=inputs.review.get_review_reappearance_labels_fn,
             apply_review_fn=inputs.review.apply_review_fn,
             normalize_topic_filters_fn=inputs.review.normalize_topic_filters_fn,
+            normalize_subtopic_filters_fn=inputs.review.normalize_subtopic_filters_fn,
+            serialize_topic_subtopic_filter_fn=inputs.review.serialize_topic_subtopic_filter_fn,
             is_randomized_review_fn=inputs.review.is_randomized_review_fn,
             extract_review_filters_from_referrer_fn=inputs.review.extract_review_filters_from_referrer_fn,
             review_redirect_fn=inputs.review.review_redirect_fn,
@@ -118,7 +131,9 @@ def build_handler_deps_bundle(
         catalog=CatalogHandlerDeps(
             list_questions_fn=inputs.catalog.list_questions_fn,
             list_questions_by_topic_fn=inputs.catalog.list_questions_by_topic_fn,
+            list_questions_by_subtopic_fn=inputs.catalog.list_questions_by_subtopic_fn,
             list_topics_with_stats_fn=inputs.catalog.list_topics_with_stats_fn,
+            list_subtopics_with_stats_fn=inputs.catalog.list_subtopics_with_stats_fn,
         ),
     )
 
@@ -130,12 +145,14 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 get_stats_fn=namespace.get_stats,
                 get_recent_questions_fn=namespace.get_recent_questions,
                 get_existing_topics_fn=namespace.get_existing_topics,
+                list_topic_subtopics_fn=namespace.list_topic_subtopics,
             ),
             generation=GenerationFlowInputs(
                 add_questions_fn=namespace.add_questions,
                 format_http_error_fn=namespace.format_http_error,
                 get_recent_topic_color_fn=namespace.get_recent_topic_color,
                 get_existing_topics_fn=namespace.get_existing_topics,
+                list_topic_subtopics_fn=namespace.list_topic_subtopics,
             ),
             review=ReviewFlowInputs(
                 get_question_by_id_fn=namespace.get_question_by_id,
@@ -146,6 +163,8 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 get_stats_fn=namespace.get_stats,
                 apply_review_fn=namespace.apply_review,
                 normalize_topic_filters_fn=namespace.normalize_topic_filters,
+                normalize_subtopic_filters_fn=namespace.normalize_subtopic_filters,
+                serialize_topic_subtopic_filter_fn=namespace.serialize_topic_subtopic_filter,
                 is_randomized_review_fn=namespace.is_randomized_review,
                 extract_review_filters_from_referrer_fn=namespace.extract_review_filters_from_referrer,
                 review_redirect_fn=namespace.review_redirect,
@@ -158,7 +177,9 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
             catalog=CatalogQueryInputs(
                 list_questions_fn=namespace.list_questions,
                 list_questions_by_topic_fn=namespace.list_questions_by_topic,
+                list_questions_by_subtopic_fn=namespace.list_questions_by_subtopic,
                 list_topics_with_stats_fn=namespace.list_topics_with_stats,
+                list_subtopics_with_stats_fn=namespace.list_subtopics_with_stats,
             ),
             options=PresentationOptions(
                 default_generation_language_code=namespace.DEFAULT_GENERATION_LANGUAGE_CODE,

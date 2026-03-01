@@ -9,6 +9,7 @@ class HomeHandlerDeps:
     get_stats_fn: Callable[[], dict]
     get_recent_questions_fn: Callable[..., Any]
     get_existing_topics_fn: Callable[..., list[str]]
+    list_topic_subtopics_fn: Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class GenerationHandlerDeps:
     format_http_error_fn: Callable[[requests.HTTPError], str]
     get_recent_topic_color_fn: Callable[[str], str | None]
     get_existing_topics_fn: Callable[..., list[str]]
+    list_topic_subtopics_fn: Callable[..., Any]
     default_generation_language_code: str
     generation_language_by_code: dict[str, str]
     generation_languages: list[tuple[str, str]]
@@ -35,8 +37,10 @@ class ReviewHandlerDeps:
     get_review_reappearance_labels_fn: Callable[[Any], dict[str, str]]
     apply_review_fn: Callable[[int, int], None]
     normalize_topic_filters_fn: Callable[[list[str]], list[str]]
+    normalize_subtopic_filters_fn: Callable[[list[str]], list[tuple[str, str]]]
+    serialize_topic_subtopic_filter_fn: Callable[[str, str], str]
     is_randomized_review_fn: Callable[[str], bool]
-    extract_review_filters_from_referrer_fn: Callable[[], tuple[list[str], bool]]
+    extract_review_filters_from_referrer_fn: Callable[[], tuple[list[str], list[tuple[str, str]], bool]]
     review_redirect_fn: Callable[..., Any]
     generate_answer_for_question_fn: Callable[[int], str]
     call_gemini_for_feedback_fn: Callable[..., dict]
@@ -51,7 +55,9 @@ class ReviewHandlerDeps:
 class CatalogHandlerDeps:
     list_questions_fn: Callable[..., Any]
     list_questions_by_topic_fn: Callable[..., Any]
+    list_questions_by_subtopic_fn: Callable[..., Any]
     list_topics_with_stats_fn: Callable[..., Any]
+    list_subtopics_with_stats_fn: Callable[..., Any]
 
 
 @dataclass(frozen=True)

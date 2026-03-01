@@ -64,6 +64,33 @@ def test_question_repo_get_due_question_respects_topic_and_exclusion(client):
     assert skipped["topic"] == "python"
 
 
+def test_question_repo_get_due_question_respects_subtopic_filter(client):
+    repo = SQLiteQuestionRepository()
+    k8s_id = insert_question(
+        "What is a Kubernetes deployment strategy?",
+        topic="devops",
+        subtopic="kubernetes",
+    )
+    terraform_id = insert_question(
+        "How does Terraform refresh work?",
+        topic="devops",
+        subtopic="terraform",
+    )
+
+    now = now_utc()
+    _set_question_times(k8s_id, next_review_at=now - timedelta(minutes=10))
+    _set_question_times(terraform_id, next_review_at=now - timedelta(minutes=5))
+
+    with flask_app.app_context():
+        selected = repo.get_due_question(
+            subtopics=[("devops", "kubernetes")],
+            randomize=False,
+        )
+
+    assert selected["id"] == k8s_id
+    assert selected["subtopic"] == "kubernetes"
+
+
 def test_question_repo_get_next_upcoming_respects_topic_filter(client):
     repo = SQLiteQuestionRepository()
     soonest_python = insert_question("How does asyncio work?", topic="python")
@@ -100,6 +127,43 @@ def test_question_repo_get_generation_context_prioritizes_same_topic(client):
     assert context[0] == "What is composition?"
     assert context[1] == "What is inheritance?"
     assert context[2] == "What is a clustered index?"
+
+
+def test_question_repo_get_generation_context_prioritizes_same_subtopic(client):
+    repo = SQLiteQuestionRepository()
+    base = now_utc()
+    k8s_old = insert_question(
+        "What is a Kubernetes pod?",
+        topic="devops",
+        subtopic="kubernetes",
+    )
+    k8s_new = insert_question(
+        "How do Kubernetes services route traffic?",
+        topic="devops",
+        subtopic="kubernetes",
+    )
+    terraform = insert_question(
+        "What is Terraform state?",
+        topic="devops",
+        subtopic="terraform",
+    )
+    other_topic = insert_question(
+        "What is a SQL clustered index?",
+        topic="sql",
+    )
+
+    _set_question_times(k8s_old, created_at=base - timedelta(days=3))
+    _set_question_times(k8s_new, created_at=base - timedelta(days=2))
+    _set_question_times(terraform, created_at=base - timedelta(days=1))
+    _set_question_times(other_topic, created_at=base - timedelta(hours=4))
+
+    with flask_app.app_context():
+        context = repo.get_generation_context_questions("devops", subtopic="kubernetes", limit=4)
+
+    assert context[0] == "How do Kubernetes services route traffic?"
+    assert context[1] == "What is a Kubernetes pod?"
+    assert context[2] == "What is Terraform state?"
+    assert context[3] == "What is a SQL clustered index?"
 
 
 def test_question_repo_list_topics_with_stats_returns_latest_color(client):
@@ -151,4 +215,3 @@ def test_feedback_repo_get_latest_feedback_returns_none_without_rows(client):
         latest = repo.get_latest_feedback(question_id=999999)
 
     assert latest is None
-

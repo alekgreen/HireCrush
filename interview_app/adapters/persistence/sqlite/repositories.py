@@ -43,6 +43,21 @@ class SQLiteQuestionRepository(QuestionRepository):
         ).fetchall()
         return [str(row["topic"]).strip() for row in rows if str(row["topic"]).strip()]
 
+    def list_topic_subtopics(self, limit: int = 400):
+        db = self._get_db()
+        return db.execute(
+            """
+            SELECT topic, subtopic, COUNT(*) AS usage_count
+            FROM questions
+            WHERE topic IS NOT NULL AND TRIM(topic) <> ''
+              AND subtopic IS NOT NULL AND TRIM(subtopic) <> ''
+            GROUP BY topic, subtopic
+            ORDER BY usage_count DESC, topic ASC, subtopic ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
     def get_recent_topic_color(self, topic: str) -> str | None:
         db = self._get_db()
         topic_clean = topic.strip()
@@ -66,26 +81,59 @@ class SQLiteQuestionRepository(QuestionRepository):
         color = str(row["topic_color"]).strip().lower()
         return color or None
 
-    def get_generation_context_questions(self, topic: str, limit: int = 120) -> list[str]:
+    def get_generation_context_questions(
+        self,
+        topic: str,
+        subtopic: str | None = None,
+        limit: int = 120,
+    ) -> list[str]:
         db = self._get_db()
         topic_clean = topic.strip()
         if not topic_clean:
             return []
 
-        same_topic_rows = db.execute(
-            """
-            SELECT text
-            FROM questions
-            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (topic_clean, limit),
-        ).fetchall()
-        context = [str(row["text"]).strip() for row in same_topic_rows if str(row["text"]).strip()]
+        context: list[str] = []
+        seen: set[str] = set()
+
+        def append_rows(rows) -> None:
+            for row in rows:
+                text = str(row["text"]).strip()
+                if not text or text in seen:
+                    continue
+                context.append(text)
+                seen.add(text)
+                if len(context) >= limit:
+                    break
+
+        subtopic_clean = (subtopic or "").strip()
+        if subtopic_clean:
+            same_subtopic_rows = db.execute(
+                """
+                SELECT text
+                FROM questions
+                WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+                  AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (topic_clean, subtopic_clean, limit),
+            ).fetchall()
+            append_rows(same_subtopic_rows)
 
         if len(context) < limit:
-            remaining = limit - len(context)
+            same_topic_rows = db.execute(
+                """
+                SELECT text
+                FROM questions
+                WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (topic_clean, limit),
+            ).fetchall()
+            append_rows(same_topic_rows)
+
+        if len(context) < limit:
             other_rows = db.execute(
                 """
                 SELECT text
@@ -94,9 +142,9 @@ class SQLiteQuestionRepository(QuestionRepository):
                 ORDER BY created_at DESC
                 LIMIT ?
                 """,
-                (topic_clean, remaining),
+                (topic_clean, limit - len(context)),
             ).fetchall()
-            context.extend(str(row["text"]).strip() for row in other_rows if str(row["text"]).strip())
+            append_rows(other_rows)
         return context
 
     @staticmethod
@@ -110,15 +158,56 @@ class SQLiteQuestionRepository(QuestionRepository):
                 cleaned.append(value.lower())
         return cleaned
 
+    @staticmethod
+    def _normalize_subtopic_filters(
+        subtopics: list[tuple[str, str]] | None,
+    ) -> list[tuple[str, str]]:
+        if not subtopics:
+            return []
+        cleaned: list[tuple[str, str]] = []
+        for topic, subtopic in subtopics:
+            topic_value = str(topic).strip().lower()
+            subtopic_value = str(subtopic).strip().lower()
+            if not topic_value or not subtopic_value:
+                continue
+            pair = (topic_value, subtopic_value)
+            if pair not in cleaned:
+                cleaned.append(pair)
+        return cleaned
+
+    @staticmethod
+    def _build_topic_scope_filter(
+        *,
+        topics: list[str],
+        subtopics: list[tuple[str, str]],
+    ) -> tuple[str, list[str]]:
+        parts: list[str] = []
+        params: list[str] = []
+        if topics:
+            placeholders = ", ".join("?" for _ in topics)
+            parts.append(f"LOWER(COALESCE(topic, '')) IN ({placeholders})")
+            params.extend(topics)
+        if subtopics:
+            pair_clauses = []
+            for topic, subtopic in subtopics:
+                pair_clauses.append("(LOWER(COALESCE(topic, '')) = ? AND LOWER(COALESCE(subtopic, '')) = ?)")
+                params.extend([topic, subtopic])
+            parts.append("(" + " OR ".join(pair_clauses) + ")")
+        if not parts:
+            return "", []
+        return " AND (" + " OR ".join(parts) + ")", params
+
     def get_due_question(
         self,
         topics: list[str] | None = None,
+        subtopics: list[tuple[str, str]] | None = None,
         randomize: bool = False,
         exclude_question_id: int | None = None,
     ):
         db = self._get_db()
         current = self._iso(self._now_utc())
         filters = self._normalize_topic_filters(topics)
+        subtopic_filters = self._normalize_subtopic_filters(subtopics)
 
         base_query = """
             SELECT *
@@ -126,10 +215,13 @@ class SQLiteQuestionRepository(QuestionRepository):
             WHERE next_review_at <= ?
         """
         params: list[str | int] = [current]
-        if filters:
-            placeholders = ", ".join("?" for _ in filters)
-            base_query += f" AND LOWER(COALESCE(topic, '')) IN ({placeholders})"
-            params.extend(filters)
+        scope_clause, scope_params = self._build_topic_scope_filter(
+            topics=filters,
+            subtopics=subtopic_filters,
+        )
+        if scope_clause:
+            base_query += scope_clause
+            params.extend(scope_params)
         if exclude_question_id is not None:
             base_query += " AND id != ?"
             params.append(int(exclude_question_id))
@@ -144,18 +236,26 @@ class SQLiteQuestionRepository(QuestionRepository):
         db = self._get_db()
         return db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)).fetchone()
 
-    def get_next_upcoming(self, topics: list[str] | None = None):
+    def get_next_upcoming(
+        self,
+        topics: list[str] | None = None,
+        subtopics: list[tuple[str, str]] | None = None,
+    ):
         db = self._get_db()
         filters = self._normalize_topic_filters(topics)
+        subtopic_filters = self._normalize_subtopic_filters(subtopics)
         query = """
             SELECT *
             FROM questions
         """
         params: list[str] = []
-        if filters:
-            placeholders = ", ".join("?" for _ in filters)
-            query += f" WHERE LOWER(COALESCE(topic, '')) IN ({placeholders})"
-            params.extend(filters)
+        scope_clause, scope_params = self._build_topic_scope_filter(
+            topics=filters,
+            subtopics=subtopic_filters,
+        )
+        if scope_clause:
+            query += f" WHERE {scope_clause.removeprefix(' AND ')}"
+            params.extend(scope_params)
 
         query += " ORDER BY next_review_at ASC LIMIT 1"
         return db.execute(query, tuple(params)).fetchone()
@@ -164,7 +264,7 @@ class SQLiteQuestionRepository(QuestionRepository):
         db = self._get_db()
         return db.execute(
             """
-            SELECT id, text, topic, topic_color, created_at
+            SELECT id, text, topic, subtopic, topic_color, created_at
             FROM questions
             ORDER BY created_at DESC
             LIMIT ?
@@ -176,7 +276,7 @@ class SQLiteQuestionRepository(QuestionRepository):
         db = self._get_db()
         return db.execute(
             """
-            SELECT id, text, topic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            SELECT id, text, topic, subtopic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
             FROM questions
             ORDER BY next_review_at ASC
             LIMIT ?
@@ -211,6 +311,42 @@ class SQLiteQuestionRepository(QuestionRepository):
             (current, limit),
         ).fetchall()
 
+    def list_subtopics_with_stats(self, topic: str | None = None, limit: int = 400):
+        db = self._get_db()
+        current = self._iso(self._now_utc())
+        params: list[str | int] = [current]
+        query = """
+            SELECT
+                q.topic AS topic,
+                q.subtopic AS subtopic,
+                COUNT(*) AS total_questions,
+                SUM(CASE WHEN q.next_review_at <= ? THEN 1 ELSE 0 END) AS due_questions,
+                (
+                    SELECT qq.topic_color
+                    FROM questions qq
+                    WHERE LOWER(COALESCE(qq.topic, '')) = LOWER(COALESCE(q.topic, ''))
+                      AND qq.topic_color IS NOT NULL
+                      AND TRIM(qq.topic_color) <> ''
+                    ORDER BY qq.created_at DESC
+                    LIMIT 1
+                ) AS topic_color
+            FROM questions q
+            WHERE q.topic IS NOT NULL AND TRIM(q.topic) <> ''
+              AND q.subtopic IS NOT NULL AND TRIM(q.subtopic) <> ''
+        """
+        topic_clean = (topic or "").strip()
+        if topic_clean:
+            query += " AND LOWER(COALESCE(q.topic, '')) = LOWER(?)"
+            params.append(topic_clean)
+
+        query += """
+            GROUP BY q.topic, q.subtopic
+            ORDER BY total_questions DESC, q.topic ASC, q.subtopic ASC
+            LIMIT ?
+        """
+        params.append(limit)
+        return db.execute(query, tuple(params)).fetchall()
+
     def list_questions_by_topic(self, topic: str, limit: int = 400):
         db = self._get_db()
         topic_clean = topic.strip()
@@ -218,13 +354,31 @@ class SQLiteQuestionRepository(QuestionRepository):
             return []
         return db.execute(
             """
-            SELECT id, text, topic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            SELECT id, text, topic, subtopic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
             FROM questions
             WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
             ORDER BY next_review_at ASC
             LIMIT ?
             """,
             (topic_clean, limit),
+        ).fetchall()
+
+    def list_questions_by_subtopic(self, topic: str, subtopic: str, limit: int = 400):
+        db = self._get_db()
+        topic_clean = topic.strip()
+        subtopic_clean = subtopic.strip()
+        if not topic_clean or not subtopic_clean:
+            return []
+        return db.execute(
+            """
+            SELECT id, text, topic, subtopic, topic_color, created_at, next_review_at, interval_days, repetitions, suggested_answer
+            FROM questions
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+              AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
+            ORDER BY next_review_at ASC
+            LIMIT ?
+            """,
+            (topic_clean, subtopic_clean, limit),
         ).fetchall()
 
 

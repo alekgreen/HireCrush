@@ -34,6 +34,19 @@ def test_topics_route_detail_filters_by_topic(client):
     assert "What is a SQL index?" not in body
 
 
+def test_topics_route_detail_filters_by_subtopic(client):
+    insert_question("How do Kubernetes pods get scheduled?", topic="devops", subtopic="kubernetes")
+    insert_question("What is Terraform state locking?", topic="devops", subtopic="terraform")
+
+    res = client.get("/topics?topic=devops&subtopic=kubernetes")
+    body = res.data.decode("utf-8")
+
+    assert res.status_code == 200
+    assert "Viewing questions for this topic and subtopic." in body
+    assert "How do Kubernetes pods get scheduled?" in body
+    assert "What is Terraform state locking?" not in body
+
+
 def test_topics_route_detail_formats_next_review_datetime(client):
     question_id = insert_question("Explain event sourcing.", topic="python")
     dt = datetime(2026, 3, 1, 16, 11, 1, tzinfo=timezone.utc)

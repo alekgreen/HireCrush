@@ -11,6 +11,7 @@ def call_for_questions(
     generate_json_fn,
     questions_json_schema: dict,
     parse_gemini_questions_fn,
+    subtopic: str | None = None,
 ) -> list[str]:
     context_block = ""
     if existing_questions:
@@ -49,14 +50,15 @@ def call_for_questions(
     prompt = (
         "Generate interview questions.\n"
         f"Topic: {topic}\n"
-        f"Count: {count}\n"
-        f"Language: {language}\n"
-        f"Write every question in {language}.\n"
-        "Do not repeat or paraphrase any existing question with the same intent.\n"
-        "A reworded version of an existing question still counts as duplicate.\n"
-        f"{additional_context_block}"
-        f"{context_block}"
-        "Return concise, unique interview questions only."
+        + (f"Subtopic: {subtopic}\n" if subtopic else "")
+        + f"Count: {count}\n"
+        + f"Language: {language}\n"
+        + f"Write every question in {language}.\n"
+        + "Do not repeat or paraphrase any existing question with the same intent.\n"
+        + "A reworded version of an existing question still counts as duplicate.\n"
+        + f"{additional_context_block}"
+        + f"{context_block}"
+        + "Return concise, unique interview questions only."
     )
 
     parsed = generate_json_fn(prompt, questions_json_schema, temperature=0.9)

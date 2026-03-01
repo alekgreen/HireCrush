@@ -3,8 +3,30 @@ import requests
 from .deps import ReviewHandlerDeps
 
 
+def _build_selected_subtopic_filters(
+    *,
+    deps: ReviewHandlerDeps,
+    selected_subtopics: list[tuple[str, str]],
+) -> list[dict[str, str]]:
+    filters: list[dict[str, str]] = []
+    for topic, subtopic in selected_subtopics:
+        value = deps.serialize_topic_subtopic_filter_fn(topic, subtopic)
+        if not value:
+            continue
+        filters.append(
+            {
+                "topic": topic,
+                "subtopic": subtopic,
+                "value": value,
+                "label": f"{topic} / {subtopic}",
+            }
+        )
+    return filters
+
+
 def review_page(*, deps: ReviewHandlerDeps, request_obj, render_template_fn):
     selected_topics = deps.normalize_topic_filters_fn(request_obj.args.getlist("topics"))
+    selected_subtopics = deps.normalize_subtopic_filters_fn(request_obj.args.getlist("subtopics"))
     randomize = deps.is_randomized_review_fn(request_obj.args.get("randomize", ""))
     skipped_qid = request_obj.args.get("skip_qid", type=int)
     requested_qid = request_obj.args.get("qid", type=int)
@@ -16,20 +38,41 @@ def review_page(*, deps: ReviewHandlerDeps, request_obj, render_template_fn):
 
     question = deps.get_question_by_id_fn(requested_qid) if requested_qid else None
     if question is None:
-        question = deps.get_due_question_fn(
-            topics=selected_topics,
-            randomize=randomize,
-            exclude_question_id=skipped_qid,
-        )
+        try:
+            question = deps.get_due_question_fn(
+                topics=selected_topics,
+                subtopics=selected_subtopics,
+                randomize=randomize,
+                exclude_question_id=skipped_qid,
+            )
+        except TypeError:
+            question = deps.get_due_question_fn(
+                topics=selected_topics,
+                randomize=randomize,
+                exclude_question_id=skipped_qid,
+            )
         if question is None and skipped_qid is not None:
-            question = deps.get_due_question_fn(topics=selected_topics, randomize=randomize)
+            try:
+                question = deps.get_due_question_fn(
+                    topics=selected_topics,
+                    subtopics=selected_subtopics,
+                    randomize=randomize,
+                )
+            except TypeError:
+                question = deps.get_due_question_fn(
+                    topics=selected_topics,
+                    randomize=randomize,
+                )
 
     stats = deps.get_stats_fn()
     upcoming = None
     latest_feedback = None
     review_reappearance_labels: dict[str, str] = {}
     if question is None:
-        upcoming = deps.get_next_upcoming_fn(topics=selected_topics)
+        try:
+            upcoming = deps.get_next_upcoming_fn(topics=selected_topics, subtopics=selected_subtopics)
+        except TypeError:
+            upcoming = deps.get_next_upcoming_fn(topics=selected_topics)
     else:
         review_reappearance_labels = deps.get_review_reappearance_labels_fn(question)
         if show_feedback:
@@ -43,16 +86,30 @@ def review_page(*, deps: ReviewHandlerDeps, request_obj, render_template_fn):
         latest_feedback=latest_feedback,
         review_reappearance_labels=review_reappearance_labels,
         selected_topics=selected_topics,
+        selected_subtopics=_build_selected_subtopic_filters(
+            deps=deps,
+            selected_subtopics=selected_subtopics,
+        ),
         randomize=randomize,
     )
 
 
-def _resolve_review_filters_from_form(*, deps: ReviewHandlerDeps, request_obj) -> tuple[list[str], bool]:
+def _resolve_review_filters_from_form(
+    *,
+    deps: ReviewHandlerDeps,
+    request_obj,
+) -> tuple[list[str], list[tuple[str, str]], bool]:
     selected_topics = deps.normalize_topic_filters_fn(request_obj.form.getlist("topics"))
+    selected_subtopics = deps.normalize_subtopic_filters_fn(request_obj.form.getlist("subtopics"))
     randomize = deps.is_randomized_review_fn(request_obj.form.get("randomize", ""))
-    if not selected_topics and not randomize:
-        selected_topics, randomize = deps.extract_review_filters_from_referrer_fn()
-    return selected_topics, randomize
+    if not selected_topics and not selected_subtopics and not randomize:
+        extracted = deps.extract_review_filters_from_referrer_fn()
+        if len(extracted) == 3:
+            selected_topics, selected_subtopics, randomize = extracted
+        else:
+            selected_topics, randomize = extracted
+            selected_subtopics = []
+    return selected_topics, selected_subtopics, randomize
 
 
 def review_submit_action(
@@ -72,14 +129,25 @@ def review_submit_action(
         return redirect_fn(url_for_fn("review"))
 
     deps.apply_review_fn(question_id, rating)
-    selected_topics, randomize = _resolve_review_filters_from_form(deps=deps, request_obj=request_obj)
-    return deps.review_redirect_fn(topics=selected_topics, randomize=randomize)
+    selected_topics, selected_subtopics, randomize = _resolve_review_filters_from_form(
+        deps=deps,
+        request_obj=request_obj,
+    )
+    return deps.review_redirect_fn(
+        topics=selected_topics,
+        subtopics=selected_subtopics,
+        randomize=randomize,
+    )
 
 
 def review_skip_action(*, deps: ReviewHandlerDeps, question_id: int, request_obj):
-    selected_topics, randomize = _resolve_review_filters_from_form(deps=deps, request_obj=request_obj)
+    selected_topics, selected_subtopics, randomize = _resolve_review_filters_from_form(
+        deps=deps,
+        request_obj=request_obj,
+    )
     return deps.review_redirect_fn(
         topics=selected_topics,
+        subtopics=selected_subtopics,
         randomize=randomize,
         skip_qid=question_id,
     )
@@ -107,8 +175,16 @@ def review_answer_action(
     except Exception as exc:
         flash_fn(f"Could not generate answer: {exc}", "error")
 
-    selected_topics, randomize = _resolve_review_filters_from_form(deps=deps, request_obj=request_obj)
-    return deps.review_redirect_fn(topics=selected_topics, randomize=randomize, qid=question_id)
+    selected_topics, selected_subtopics, randomize = _resolve_review_filters_from_form(
+        deps=deps,
+        request_obj=request_obj,
+    )
+    return deps.review_redirect_fn(
+        topics=selected_topics,
+        subtopics=selected_subtopics,
+        randomize=randomize,
+        qid=question_id,
+    )
 
 
 def review_feedback_action(
@@ -126,10 +202,18 @@ def review_feedback_action(
         return redirect_fn(url_for_fn("review"))
 
     user_answer = request_obj.form.get("user_answer", "").strip()
-    selected_topics, randomize = _resolve_review_filters_from_form(deps=deps, request_obj=request_obj)
+    selected_topics, selected_subtopics, randomize = _resolve_review_filters_from_form(
+        deps=deps,
+        request_obj=request_obj,
+    )
     if len(user_answer) < 20:
         flash_fn("Please enter a longer answer to get meaningful feedback.", "error")
-        return deps.review_redirect_fn(topics=selected_topics, randomize=randomize, qid=question_id)
+        return deps.review_redirect_fn(
+            topics=selected_topics,
+            subtopics=selected_subtopics,
+            randomize=randomize,
+            qid=question_id,
+        )
 
     show_feedback = False
     try:
@@ -150,11 +234,17 @@ def review_feedback_action(
     if show_feedback:
         return deps.review_redirect_fn(
             topics=selected_topics,
+            subtopics=selected_subtopics,
             randomize=randomize,
             qid=question_id,
             show_feedback=True,
         )
-    return deps.review_redirect_fn(topics=selected_topics, randomize=randomize, qid=question_id)
+    return deps.review_redirect_fn(
+        topics=selected_topics,
+        subtopics=selected_subtopics,
+        randomize=randomize,
+        qid=question_id,
+    )
 
 
 def review_transcribe_action(*, deps: ReviewHandlerDeps, request_obj, jsonify_fn):

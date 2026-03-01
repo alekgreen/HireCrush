@@ -1,5 +1,6 @@
 import requests
 
+from interview_app.utils import serialize_topic_subtopic
 from tests.support import insert_question
 
 
@@ -149,6 +150,43 @@ def test_generate_route_prefers_custom_topic_over_selected(client, override_hand
     assert captured["topic_color"] == "blue"
 
 
+def test_generate_route_accepts_subtopic_without_explicit_topic(client, override_handler_deps):
+    captured = {}
+
+    def fake_add_questions(
+        _topic,
+        _count,
+        language="English",
+        additional_context=None,
+        topic_color="blue",
+        subtopic=None,
+    ):
+        captured["topic"] = _topic
+        captured["count"] = _count
+        captured["subtopic"] = subtopic
+        captured["language"] = language
+        return 1, 0
+
+    override_handler_deps(generation={"add_questions_fn": fake_add_questions})
+    response = client.post(
+        "/generate",
+        data={
+            "subtopic_select": serialize_topic_subtopic("DevOps", "Kubernetes"),
+            "count": "2",
+            "language": "en",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "topic": "DevOps",
+        "count": 2,
+        "subtopic": "Kubernetes",
+        "language": "English",
+    }
+
+
 def test_generate_route_rejects_invalid_language(client):
     response = client.post(
         "/generate",
@@ -241,4 +279,3 @@ def test_generate_route_uses_existing_topic_color_when_none_selected(client, ove
 
     assert response.status_code == 200
     assert captured["topic_color"] == "rose"
-

@@ -19,6 +19,7 @@ def test_run_migrations_records_versions(tmp_path):
             "0001_initial_schema",
             "0002_add_suggested_answer",
             "0003_add_topic_color",
+            "0004_add_subtopic",
         ]
         assert applied == expected
 
@@ -41,6 +42,7 @@ def test_run_migrations_is_idempotent(tmp_path):
             "0001_initial_schema",
             "0002_add_suggested_answer",
             "0003_add_topic_color",
+            "0004_add_subtopic",
         ]
         assert second_run == []
 
@@ -55,11 +57,13 @@ def test_migration_status_helpers(tmp_path):
             "0001_initial_schema",
             "0002_add_suggested_answer",
             "0003_add_topic_color",
+            "0004_add_subtopic",
         ]
         assert list_pending_migrations() == [
             "0001_initial_schema",
             "0002_add_suggested_answer",
             "0003_add_topic_color",
+            "0004_add_subtopic",
         ]
         assert list_applied_migrations() == []
 
@@ -72,5 +76,6 @@ def test_migration_status_helpers(tmp_path):
             "0001_initial_schema",
             "0002_add_suggested_answer",
             "0003_add_topic_color",
+            "0004_add_subtopic",
         ]
         assert pending == []

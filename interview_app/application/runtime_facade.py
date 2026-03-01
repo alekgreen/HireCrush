@@ -146,6 +146,7 @@ class RuntimeFacade:
         language: str = "English",
         existing_questions: list[str] | None = None,
         additional_context: str | None = None,
+        subtopic: str | None = None,
     ) -> list[str]:
         return self._generation_service.call_for_questions(
             topic=topic,
@@ -156,6 +157,7 @@ class RuntimeFacade:
             generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
             questions_json_schema=self._questions_json_schema,
             parse_gemini_questions_fn=self._parse_gemini_questions_fn,
+            subtopic=subtopic,
         )
 
     def call_gemini_for_answer(self, question: str, topic: str | None = None) -> str:
@@ -182,10 +184,12 @@ class RuntimeFacade:
         language: str = "English",
         additional_context: str | None = None,
         topic_color: str = "",
+        subtopic: str | None = None,
     ) -> tuple[int, int]:
         resolved_topic_color = topic_color or self._default_topic_tag_color_code
         return self._question_service.add_questions(
             topic=topic,
+            subtopic=subtopic,
             requested_count=requested_count,
             language=language,
             additional_context=additional_context,
@@ -230,16 +234,26 @@ class RuntimeFacade:
     def normalize_topic_filters(self, raw_values: list[str]) -> list[str]:
         return self._review_service.normalize_topic_filters(raw_values)
 
+    def normalize_subtopic_filters(self, raw_values: list[str]) -> list[tuple[str, str]]:
+        return self._review_service.normalize_subtopic_filters(raw_values)
+
+    def serialize_topic_subtopic_filter(self, topic: str, subtopic: str) -> str:
+        return self._review_service.serialize_topic_subtopic_filter(topic, subtopic)
+
     def is_randomized_review(self, value: str) -> bool:
         return self._review_service.is_randomized_review(value)
 
-    def extract_review_filters_from_referrer(self, referrer: str) -> tuple[list[str], bool]:
+    def extract_review_filters_from_referrer(
+        self,
+        referrer: str,
+    ) -> tuple[list[str], list[tuple[str, str]], bool]:
         return self._review_service.extract_review_filters_from_referrer(referrer)
 
     def review_redirect(
         self,
         *,
         topics: list[str] | None,
+        subtopics: list[tuple[str, str]] | None,
         randomize: bool,
         qid: int | None,
         show_feedback: bool,
@@ -258,4 +272,12 @@ class RuntimeFacade:
             params["randomize"] = 1
         if topics:
             params["topics"] = topics
+        if subtopics:
+            serialized_subtopics: list[str] = []
+            for topic, subtopic in subtopics:
+                value = self.serialize_topic_subtopic_filter(topic, subtopic)
+                if value:
+                    serialized_subtopics.append(value)
+            if serialized_subtopics:
+                params["subtopics"] = serialized_subtopics
         return redirect_fn(url_for_fn("review", **params))

@@ -3,6 +3,8 @@ import json
 import re
 from datetime import datetime, timezone
 
+TOPIC_SUBTOPIC_SEPARATOR = ":::"
+
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -109,3 +111,23 @@ def parse_json_from_text(raw_text: str):
         except json.JSONDecodeError:
             continue
     return None
+
+
+def serialize_topic_subtopic(topic: str, subtopic: str) -> str:
+    topic_clean = str(topic).strip()
+    subtopic_clean = str(subtopic).strip()
+    if not topic_clean or not subtopic_clean:
+        return ""
+    return f"{topic_clean}{TOPIC_SUBTOPIC_SEPARATOR}{subtopic_clean}"
+
+
+def parse_topic_subtopic(value: str) -> tuple[str, str] | None:
+    raw = str(value).strip()
+    if not raw or TOPIC_SUBTOPIC_SEPARATOR not in raw:
+        return None
+    topic, subtopic = raw.split(TOPIC_SUBTOPIC_SEPARATOR, 1)
+    topic = topic.strip()
+    subtopic = subtopic.strip()
+    if not topic or not subtopic:
+        return None
+    return topic, subtopic

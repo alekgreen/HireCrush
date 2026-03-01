@@ -1,6 +1,8 @@
 from datetime import timedelta
 from urllib.parse import parse_qsl
 
+from interview_app.utils import parse_topic_subtopic, serialize_topic_subtopic
+
 
 def _compute_review_outcome(
     *,
@@ -136,20 +138,38 @@ def normalize_topic_filters(raw_values: list[str]) -> list[str]:
     return topics
 
 
+def normalize_subtopic_filters(raw_values: list[str]) -> list[tuple[str, str]]:
+    subtopics: list[tuple[str, str]] = []
+    for value in raw_values:
+        parsed = parse_topic_subtopic(str(value))
+        if parsed is None:
+            continue
+        if parsed not in subtopics:
+            subtopics.append(parsed)
+    return subtopics
+
+
+def serialize_topic_subtopic_filter(topic: str, subtopic: str) -> str:
+    return serialize_topic_subtopic(topic, subtopic)
+
+
 def is_randomized_review(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def extract_review_filters_from_referrer(referrer: str) -> tuple[list[str], bool]:
+def extract_review_filters_from_referrer(
+    referrer: str,
+) -> tuple[list[str], list[tuple[str, str]], bool]:
     if not referrer:
-        return [], False
+        return [], [], False
 
     try:
         query = referrer.split("?", 1)[1]
     except IndexError:
-        return [], False
+        return [], [], False
 
     parsed = parse_qsl(query, keep_blank_values=False)
     topics = normalize_topic_filters([value for key, value in parsed if key == "topics"])
+    subtopics = normalize_subtopic_filters([value for key, value in parsed if key == "subtopics"])
     randomize = any(key == "randomize" and is_randomized_review(value) for key, value in parsed)
-    return topics, randomize
+    return topics, subtopics, randomize

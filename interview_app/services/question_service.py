@@ -1,5 +1,6 @@
 def add_questions(
     topic: str,
+    subtopic: str | None,
     requested_count: int,
     language: str,
     additional_context: str | None,
@@ -22,18 +23,34 @@ def add_questions(
     inserted = 0
     attempts = 0
     max_attempts = 5
-    generation_context = get_generation_context_questions_fn(topic, limit=120)
+    try:
+        generation_context = get_generation_context_questions_fn(topic, subtopic=subtopic, limit=120)
+    except TypeError:
+        generation_context = get_generation_context_questions_fn(topic, limit=120)
 
     while inserted < requested_count and attempts < max_attempts:
         attempts += 1
         needed = min(10, (requested_count - inserted) * 2)
-        generated = call_gemini_for_questions_fn(
-            topic,
-            needed,
-            language=language,
-            existing_questions=generation_context,
-            additional_context=additional_context,
-        )
+        call_kwargs = {
+            "language": language,
+            "existing_questions": generation_context,
+            "additional_context": additional_context,
+        }
+        if subtopic:
+            call_kwargs["subtopic"] = subtopic
+        try:
+            generated = call_gemini_for_questions_fn(
+                topic,
+                needed,
+                **call_kwargs,
+            )
+        except TypeError:
+            call_kwargs.pop("subtopic", None)
+            generated = call_gemini_for_questions_fn(
+                topic,
+                needed,
+                **call_kwargs,
+            )
         if not generated:
             continue
 
@@ -58,11 +75,20 @@ def add_questions(
             db.execute(
                 """
                 INSERT INTO questions (
-                    text, text_hash, topic, topic_color, created_at, next_review_at,
+                    text, text_hash, topic, subtopic, topic_color, created_at, next_review_at,
                     suggested_answer, repetitions, interval_days, ease_factor
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
                 """,
-                (text, text_hash, topic, topic_color, iso_fn(now), iso_fn(now), suggested_answer),
+                (
+                    text,
+                    text_hash,
+                    topic,
+                    subtopic,
+                    topic_color,
+                    iso_fn(now),
+                    iso_fn(now),
+                    suggested_answer,
+                ),
             )
             existing_hashes.add(text_hash)
             generation_context.append(text)

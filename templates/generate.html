@@ -4,7 +4,7 @@
   <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-400">Create a focused drill set</p>
   <h2 class="font-display text-2xl text-slate-900 dark:text-zinc-100">Generate New Questions</h2>
   <p class="mt-2 text-sm text-slate-600 dark:text-zinc-300">
-    Choose an existing topic or create a new one, then set quantity. The app uses
+    Choose a topic or subtopic (or create new ones), then set quantity. The app uses
     existing saved questions as context to reduce repeats.
   </p>
 
@@ -12,7 +12,7 @@
     <div>
       <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic_select">Existing topic</label>
       <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="topic_select" name="topic_select">
-        <option value="">Select a saved topic</option>
+        <option value="">Select a saved topic (optional)</option>
         {% for topic_name in available_topics %}
           <option value="{{ topic_name }}">{{ topic_name }}</option>
         {% endfor %}
@@ -22,6 +22,23 @@
     <div>
       <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic_new">Or create a new topic</label>
       <input class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="topic_new" name="topic_new" type="text" placeholder="e.g. Python backend, system design, data structures">
+    </div>
+
+    <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="subtopic_select">Existing subtopic</label>
+      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="subtopic_select" name="subtopic_select">
+        <option value="">Select a saved subtopic (optional)</option>
+        {% for item in available_subtopics %}
+          <option value="{{ item.value }}">{{ item.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">If topic is empty, selecting a subtopic will auto-use its parent topic.</p>
+    </div>
+
+    <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="subtopic_new">Or create a new subtopic</label>
+      <input class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="subtopic_new" name="subtopic_new" type="text" placeholder="e.g. Kubernetes, Terraform, CI/CD pipelines">
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">New subtopics are saved under the selected or typed topic.</p>
     </div>
 
     <div>

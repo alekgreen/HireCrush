@@ -6,6 +6,7 @@ from interview_app.utils import iso, now_utc, question_hash
 def insert_question(
     text="What is polymorphism in OOP?",
     topic="python",
+    subtopic=None,
     suggested_answer=None,
     topic_color=None,
 ):
@@ -15,14 +16,15 @@ def insert_question(
         db.execute(
             """
             INSERT INTO questions (
-                text, text_hash, topic, topic_color, created_at, next_review_at,
+                text, text_hash, topic, subtopic, topic_color, created_at, next_review_at,
                 suggested_answer, repetitions, interval_days, ease_factor
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
             """,
             (
                 text,
                 question_hash(text),
                 topic,
+                subtopic,
                 topic_color,
                 iso(now),
                 iso(now),
