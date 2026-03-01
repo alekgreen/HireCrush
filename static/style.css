@@ -24,10 +24,7 @@ body {
   min-height: 100vh;
   font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 0% 0%, #fdf8ef 0%, transparent 38%),
-    radial-gradient(circle at 96% 96%, #d9e8f3 0%, transparent 44%),
-    linear-gradient(150deg, var(--bg-1) 0%, var(--bg-2) 100%);
+  background-color: var(--bg-1);
 }
 
 body::before {
@@ -35,10 +32,7 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background-image: linear-gradient(rgba(15, 80, 111, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 80, 111, 0.03) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: radial-gradient(circle at 50% 20%, #000 35%, transparent 100%);
+  background: transparent;
 }
 
 a {
@@ -79,7 +73,7 @@ p {
   gap: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 16px;
-  background: linear-gradient(125deg, #14597a 0%, #0d415b 100%);
+  background: #14597a;
   box-shadow: var(--shadow);
 }
 
@@ -173,7 +167,7 @@ p {
   padding: 1.1rem 1.2rem;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 18px;
-  background: linear-gradient(160deg, var(--surface-strong) 0%, var(--surface) 100%);
+  background: var(--surface-strong);
   box-shadow: var(--shadow);
   animation: rise-in 400ms ease both;
 }
@@ -198,7 +192,7 @@ p {
   right: -90px;
   top: -100px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(219, 107, 44, 0.24) 0%, transparent 70%);
+  background: rgba(219, 107, 44, 0.2);
 }
 
 .eyebrow {
