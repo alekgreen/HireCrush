@@ -1,14 +1,10 @@
-import json
 import os
-import re
-import base64
-from datetime import timedelta
-from urllib.parse import parse_qsl
 
 import requests
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
+from interview_app import gemini_service, generation_service, question_service, review_service
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
@@ -33,15 +29,14 @@ from interview_app.repository import (
     get_recent_topic_color,
     get_recent_questions,
     get_stats,
-    list_questions_by_topic,
     list_questions,
+    list_questions_by_topic,
     list_topics_with_stats,
     save_feedback,
 )
 from interview_app.utils import (
     clean_question_text,
     iso,
-    normalize_text,
     now_utc,
     parse_gemini_questions,
     parse_iso,
@@ -61,16 +56,8 @@ app.config["AUTO_GENERATE_ANSWERS"] = (
 )
 app.teardown_appcontext(close_db)
 
-SUPPORTED_AUDIO_MIME_TYPES = {
-    "audio/wav",
-    "audio/mp3",
-    "audio/mpeg",
-    "audio/aiff",
-    "audio/aac",
-    "audio/ogg",
-    "audio/flac",
-}
-MAX_INLINE_AUDIO_BYTES = 19 * 1024 * 1024
+SUPPORTED_AUDIO_MIME_TYPES = gemini_service.SUPPORTED_AUDIO_MIME_TYPES
+MAX_INLINE_AUDIO_BYTES = gemini_service.MAX_INLINE_AUDIO_BYTES
 
 
 @app.context_processor
@@ -82,146 +69,43 @@ def inject_topic_tag_style():
 
 
 def gemini_model_candidates() -> list[str]:
-    configured = app.config.get("GEMINI_MODEL", "").strip()
-    env_fallbacks = os.getenv("GEMINI_FALLBACK_MODELS", "").strip()
-    extras = [m.strip() for m in env_fallbacks.split(",") if m.strip()]
-
-    candidates = []
-    for model in [configured, *extras, *GEMINI_MODEL_FALLBACKS]:
-        if model and model not in candidates:
-            candidates.append(model)
-    return candidates
+    return gemini_service.build_model_candidates(
+        configured_model=str(app.config.get("GEMINI_MODEL", "")),
+        env_fallback_models=os.getenv("GEMINI_FALLBACK_MODELS", ""),
+        default_models=GEMINI_MODEL_FALLBACKS,
+    )
 
 
 def gemini_generate_json(prompt: str, response_schema: dict, temperature: float = 0.8):
-    api_key = app.config["GEMINI_API_KEY"]
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is missing.")
-
-    tried_models = []
-    for model in gemini_model_candidates():
-        tried_models.append(model)
-        endpoint = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent?key={api_key}"
-        )
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": temperature,
-                "responseMimeType": "application/json",
-                "responseJsonSchema": response_schema,
-            },
-        }
-
-        response = requests.post(endpoint, json=payload, timeout=30)
-        if response.status_code == 404:
-            continue
-        response.raise_for_status()
-
-        data = response.json()
-        options = data.get("candidates", [])
-        if not options:
-            continue
-        parts = options[0].get("content", {}).get("parts", [])
-        if not parts:
-            continue
-
-        raw = parts[0].get("text", "")
-        parsed = parse_json_from_text(raw)
-        if parsed is not None:
-            app.config["LAST_WORKING_GEMINI_MODEL"] = model
-            return parsed
-
-    tried_list = ", ".join(tried_models) if tried_models else "(none)"
-    raise RuntimeError(
-        "No compatible Gemini model found for this API key. "
-        f"Tried models: {tried_list}"
+    parsed, model = gemini_service.generate_json(
+        prompt=prompt,
+        response_schema=response_schema,
+        temperature=temperature,
+        api_key=app.config["GEMINI_API_KEY"],
+        model_candidates=gemini_model_candidates(),
+        parse_json_from_text_fn=parse_json_from_text,
+        http_client=requests,
     )
+    app.config["LAST_WORKING_GEMINI_MODEL"] = model
+    return parsed
 
 
 def normalize_audio_mime_type(mime_type: str) -> str | None:
-    aliases = {
-        "audio/x-wav": "audio/wav",
-        "audio/wave": "audio/wav",
-        "audio/x-pn-wav": "audio/wav",
-        "audio/x-aiff": "audio/aiff",
-        "audio/mpga": "audio/mpeg",
-    }
-    normalized = aliases.get(mime_type.strip().lower(), mime_type.strip().lower())
-    if normalized in SUPPORTED_AUDIO_MIME_TYPES:
-        return normalized
-    return None
+    return gemini_service.normalize_audio_mime_type(mime_type)
 
 
 def call_gemini_for_transcription(audio_bytes: bytes, mime_type: str) -> str:
-    if not audio_bytes:
-        raise RuntimeError("Audio file is empty.")
-    if len(audio_bytes) > MAX_INLINE_AUDIO_BYTES:
-        raise RuntimeError("Audio file is too large. Keep uploads under 19 MB.")
-
-    normalized_mime_type = normalize_audio_mime_type(mime_type)
-    if normalized_mime_type is None:
-        raise RuntimeError("Unsupported audio format.")
-
-    api_key = app.config["GEMINI_API_KEY"]
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is missing.")
-
-    encoded_audio = base64.b64encode(audio_bytes).decode("ascii")
-    prompt = (
-        "Transcribe this audio clip. Return only the transcript text, "
-        "with punctuation and no additional commentary."
+    transcript, model = gemini_service.transcribe_audio(
+        audio_bytes=audio_bytes,
+        mime_type=mime_type,
+        api_key=app.config["GEMINI_API_KEY"],
+        model_candidates=gemini_model_candidates(),
+        http_client=requests,
+        normalize_audio_mime_type_fn=normalize_audio_mime_type,
+        max_inline_audio_bytes=MAX_INLINE_AUDIO_BYTES,
     )
-
-    tried_models = []
-    for model in gemini_model_candidates():
-        tried_models.append(model)
-        endpoint = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent?key={api_key}"
-        )
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": normalized_mime_type,
-                                "data": encoded_audio,
-                            }
-                        },
-                    ]
-                }
-            ],
-            "generationConfig": {"temperature": 0.0},
-        }
-
-        response = requests.post(endpoint, json=payload, timeout=60)
-        if response.status_code == 404:
-            continue
-        response.raise_for_status()
-
-        data = response.json()
-        options = data.get("candidates", [])
-        if not options:
-            continue
-        parts = options[0].get("content", {}).get("parts", [])
-        transcript_parts = []
-        for part in parts:
-            text = str(part.get("text", "")).strip()
-            if text:
-                transcript_parts.append(text)
-        if transcript_parts:
-            app.config["LAST_WORKING_GEMINI_MODEL"] = model
-            return "\n".join(transcript_parts)
-
-    tried_list = ", ".join(tried_models) if tried_models else "(none)"
-    raise RuntimeError(
-        "No compatible Gemini model found for this API key. "
-        f"Tried models: {tried_list}"
-    )
+    app.config["LAST_WORKING_GEMINI_MODEL"] = model
+    return transcript
 
 
 def call_gemini_for_questions(
@@ -231,102 +115,35 @@ def call_gemini_for_questions(
     existing_questions: list[str] | None = None,
     additional_context: str | None = None,
 ) -> list[str]:
-    context_block = ""
-    if existing_questions:
-        capped_lines = []
-        total_chars = 0
-        max_chars = 12000
-        for idx, question in enumerate(existing_questions[:120], start=1):
-            compact = re.sub(r"\s+", " ", str(question).strip())
-            if not compact:
-                continue
-            if len(compact) > 220:
-                compact = compact[:217] + "..."
-            line = f"{idx}. {compact}"
-            total_chars += len(line) + 1
-            if total_chars > max_chars:
-                break
-            capped_lines.append(line)
-        if capped_lines:
-            context_block = (
-                "Existing questions already stored in the system:\n"
-                + "\n".join(capped_lines)
-                + "\n"
-            )
-
-    additional_context_block = ""
-    if additional_context:
-        compact_context = re.sub(r"\s+", " ", str(additional_context).strip())
-        if compact_context:
-            if len(compact_context) > 1200:
-                compact_context = compact_context[:1200].rstrip() + "..."
-            additional_context_block = (
-                "Additional user context to follow when generating questions:\n"
-                f"{compact_context}\n"
-            )
-
-    prompt = (
-        "Generate interview questions.\n"
-        f"Topic: {topic}\n"
-        f"Count: {count}\n"
-        f"Language: {language}\n"
-        f"Write every question in {language}.\n"
-        "Do not repeat or paraphrase any existing question with the same intent.\n"
-        "A reworded version of an existing question still counts as duplicate.\n"
-        f"{additional_context_block}"
-        f"{context_block}"
-        "Return concise, unique interview questions only."
+    return generation_service.call_for_questions(
+        topic=topic,
+        count=count,
+        language=language,
+        existing_questions=existing_questions,
+        additional_context=additional_context,
+        generate_json_fn=gemini_generate_json,
+        questions_json_schema=QUESTIONS_JSON_SCHEMA,
+        parse_gemini_questions_fn=parse_gemini_questions,
     )
-    parsed = gemini_generate_json(prompt, QUESTIONS_JSON_SCHEMA, temperature=0.9)
-    if isinstance(parsed, list):
-        return [str(item).strip() for item in parsed if str(item).strip()]
-    if isinstance(parsed, dict):
-        values = parsed.get("questions", [])
-        if isinstance(values, list):
-            return [str(item).strip() for item in values if str(item).strip()]
-    return parse_gemini_questions(json.dumps(parsed))
 
 
 def call_gemini_for_answer(question: str, topic: str | None = None) -> str:
-    prompt = (
-        "You are helping a candidate prepare for interviews.\n"
-        f"Topic: {topic or 'General'}\n"
-        f"Question: {question}\n"
-        "Provide one high-quality sample answer (around 120-220 words), practical and specific."
+    return generation_service.call_for_answer(
+        question=question,
+        topic=topic,
+        generate_json_fn=gemini_generate_json,
+        answer_json_schema=ANSWER_JSON_SCHEMA,
     )
-    parsed = gemini_generate_json(prompt, ANSWER_JSON_SCHEMA, temperature=0.6)
-    if isinstance(parsed, dict):
-        answer = str(parsed.get("answer", "")).strip()
-        if answer:
-            return answer
-    raise RuntimeError("Gemini did not return a valid answer.")
 
 
 def call_gemini_for_feedback(question: str, reference_answer: str, user_answer: str) -> dict:
-    prompt = (
-        "Evaluate the user's interview answer.\n"
-        f"Question: {question}\n"
-        f"Reference answer: {reference_answer}\n"
-        f"User answer: {user_answer}\n"
-        "Score the user answer from 1 to 10 and provide direct coaching."
+    return generation_service.call_for_feedback(
+        question=question,
+        reference_answer=reference_answer,
+        user_answer=user_answer,
+        generate_json_fn=gemini_generate_json,
+        feedback_json_schema=FEEDBACK_JSON_SCHEMA,
     )
-    parsed = gemini_generate_json(prompt, FEEDBACK_JSON_SCHEMA, temperature=0.4)
-    if not isinstance(parsed, dict):
-        raise RuntimeError("Gemini did not return a valid feedback payload.")
-
-    def to_list(value) -> list[str]:
-        if not isinstance(value, list):
-            return []
-        return [str(item).strip() for item in value if str(item).strip()]
-
-    return {
-        "score": max(1, min(10, int(parsed.get("score", 1)))),
-        "feedback": str(parsed.get("feedback", "")).strip() or "No feedback provided.",
-        "improved_answer": str(parsed.get("improved_answer", "")).strip()
-        or "No improved answer provided.",
-        "strengths": to_list(parsed.get("strengths")),
-        "gaps": to_list(parsed.get("gaps")),
-    }
 
 
 def add_questions(
@@ -336,162 +153,53 @@ def add_questions(
     additional_context: str | None = None,
     topic_color: str = DEFAULT_TOPIC_TAG_COLOR_CODE,
 ) -> tuple[int, int]:
-    db = get_db()
-    existing_hashes = {
-        row["text_hash"] for row in db.execute("SELECT text_hash FROM questions").fetchall()
-    }
-    inserted = 0
-    attempts = 0
-    max_attempts = 5
-    generation_context = get_generation_context_questions(topic, limit=120)
-
-    while inserted < requested_count and attempts < max_attempts:
-        attempts += 1
-        needed = min(10, (requested_count - inserted) * 2)
-        generated = call_gemini_for_questions(
-            topic,
-            needed,
-            language=language,
-            existing_questions=generation_context,
-            additional_context=additional_context,
-        )
-        if not generated:
-            continue
-
-        for item in generated:
-            if inserted >= requested_count:
-                break
-            text = clean_question_text(item)
-            if not text or len(text) < 10:
-                continue
-            h = question_hash(text)
-            if h in existing_hashes:
-                continue
-
-            now = now_utc()
-            suggested_answer = None
-            if app.config.get("AUTO_GENERATE_ANSWERS", True):
-                try:
-                    suggested_answer = call_gemini_for_answer(text, topic)
-                except Exception:
-                    suggested_answer = None
-            db.execute(
-                """
-                INSERT INTO questions (
-                    text, text_hash, topic, topic_color, created_at, next_review_at,
-                    suggested_answer, repetitions, interval_days, ease_factor
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
-                """,
-                (text, h, topic, topic_color, iso(now), iso(now), suggested_answer),
-            )
-            existing_hashes.add(h)
-            generation_context.append(text)
-            inserted += 1
-
-    db.commit()
-    return inserted, requested_count - inserted
+    return question_service.add_questions(
+        topic=topic,
+        requested_count=requested_count,
+        language=language,
+        additional_context=additional_context,
+        topic_color=topic_color,
+        get_db_fn=get_db,
+        get_generation_context_questions_fn=get_generation_context_questions,
+        call_gemini_for_questions_fn=call_gemini_for_questions,
+        clean_question_text_fn=clean_question_text,
+        question_hash_fn=question_hash,
+        now_utc_fn=now_utc,
+        iso_fn=iso,
+        auto_generate_answers=bool(app.config.get("AUTO_GENERATE_ANSWERS", True)),
+        call_gemini_for_answer_fn=call_gemini_for_answer,
+    )
 
 
 def generate_answer_for_question(question_id: int) -> str:
-    db = get_db()
-    question = get_question_by_id(question_id)
-    if question is None:
-        raise RuntimeError("Question not found.")
-
-    existing = (question["suggested_answer"] or "").strip()
-    if existing:
-        return existing
-
-    answer = call_gemini_for_answer(question["text"], question["topic"])
-    db.execute(
-        "UPDATE questions SET suggested_answer = ? WHERE id = ?",
-        (answer, question_id),
+    return question_service.generate_answer_for_question(
+        question_id=question_id,
+        get_db_fn=get_db,
+        get_question_by_id_fn=get_question_by_id,
+        call_gemini_for_answer_fn=call_gemini_for_answer,
     )
-    db.commit()
-    return answer
 
 
 def format_http_error(exc: requests.HTTPError) -> str:
-    response = getattr(exc, "response", None)
-    if response is None:
-        return "Gemini API request failed."
-    status = response.status_code
-    reason = response.reason or "Error"
-    if status == 404:
-        return (
-            "Gemini model was not found. Set GEMINI_MODEL to a supported model "
-            "(for example: gemini-2.5-flash or gemini-3-flash-preview)."
-        )
-    if status == 429:
-        return "Gemini API rate limit exceeded. Please retry in a moment."
-    return f"Gemini API request failed ({status} {reason})."
+    return question_service.format_http_error(exc)
 
 
 def apply_review(question_id: int, rating: int) -> None:
-    db = get_db()
-    question = db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)).fetchone()
-    if question is None:
-        return
-
-    now = now_utc()
-    ef = float(question["ease_factor"])
-    reps = int(question["repetitions"])
-    interval = int(question["interval_days"])
-    old_ef = ef
-    old_interval = interval
-
-    if rating <= 2:
-        reps = 0
-        interval = 0
-        next_due = now + timedelta(minutes=10)
-    else:
-        ef = max(1.3, ef + (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)))
-        if reps == 0:
-            interval = 1
-        elif reps == 1:
-            interval = 6
-        else:
-            interval = max(1, round(interval * ef))
-        if rating == 5:
-            interval = max(interval + 1, round(interval * 1.3))
-        reps += 1
-        next_due = now + timedelta(days=interval)
-
-    db.execute(
-        """
-        UPDATE questions
-        SET repetitions = ?,
-            interval_days = ?,
-            ease_factor = ?,
-            last_reviewed_at = ?,
-            next_review_at = ?
-        WHERE id = ?
-        """,
-        (reps, interval, ef, iso(now), iso(next_due), question_id),
+    review_service.apply_review(
+        question_id=question_id,
+        rating=rating,
+        get_db_fn=get_db,
+        now_utc_fn=now_utc,
+        iso_fn=iso,
     )
-    db.execute(
-        """
-        INSERT INTO review_history (
-            question_id, rating, reviewed_at, old_interval_days,
-            new_interval_days, old_ease_factor, new_ease_factor
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (question_id, rating, iso(now), old_interval, interval, old_ef, ef),
-    )
-    db.commit()
 
 
 def normalize_topic_filters(raw_values: list[str]) -> list[str]:
-    topics: list[str] = []
-    for value in raw_values:
-        topic = str(value).strip()
-        if topic and topic not in topics:
-            topics.append(topic)
-    return topics
+    return review_service.normalize_topic_filters(raw_values)
 
 
 def is_randomized_review(value: str) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+    return review_service.is_randomized_review(value)
 
 
 def review_redirect(
@@ -516,19 +224,7 @@ def review_redirect(
 
 
 def extract_review_filters_from_referrer() -> tuple[list[str], bool]:
-    referrer = request.referrer or ""
-    if not referrer:
-        return [], False
-
-    try:
-        query = referrer.split("?", 1)[1]
-    except IndexError:
-        return [], False
-
-    parsed = parse_qsl(query, keep_blank_values=False)
-    topics = normalize_topic_filters([value for key, value in parsed if key == "topics"])
-    randomize = any(key == "randomize" and is_randomized_review(value) for key, value in parsed)
-    return topics, randomize
+    return review_service.extract_review_filters_from_referrer(request.referrer or "")
 
 
 @app.route("/")

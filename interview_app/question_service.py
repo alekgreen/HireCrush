@@ -1,0 +1,113 @@
+def add_questions(
+    topic: str,
+    requested_count: int,
+    language: str,
+    additional_context: str | None,
+    topic_color: str,
+    get_db_fn,
+    get_generation_context_questions_fn,
+    call_gemini_for_questions_fn,
+    clean_question_text_fn,
+    question_hash_fn,
+    now_utc_fn,
+    iso_fn,
+    auto_generate_answers: bool,
+    call_gemini_for_answer_fn,
+) -> tuple[int, int]:
+    db = get_db_fn()
+    existing_hashes = {
+        row["text_hash"] for row in db.execute("SELECT text_hash FROM questions").fetchall()
+    }
+
+    inserted = 0
+    attempts = 0
+    max_attempts = 5
+    generation_context = get_generation_context_questions_fn(topic, limit=120)
+
+    while inserted < requested_count and attempts < max_attempts:
+        attempts += 1
+        needed = min(10, (requested_count - inserted) * 2)
+        generated = call_gemini_for_questions_fn(
+            topic,
+            needed,
+            language=language,
+            existing_questions=generation_context,
+            additional_context=additional_context,
+        )
+        if not generated:
+            continue
+
+        for item in generated:
+            if inserted >= requested_count:
+                break
+            text = clean_question_text_fn(item)
+            if not text or len(text) < 10:
+                continue
+            text_hash = question_hash_fn(text)
+            if text_hash in existing_hashes:
+                continue
+
+            now = now_utc_fn()
+            suggested_answer = None
+            if auto_generate_answers:
+                try:
+                    suggested_answer = call_gemini_for_answer_fn(text, topic)
+                except Exception:
+                    suggested_answer = None
+
+            db.execute(
+                """
+                INSERT INTO questions (
+                    text, text_hash, topic, topic_color, created_at, next_review_at,
+                    suggested_answer, repetitions, interval_days, ease_factor
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 2.5)
+                """,
+                (text, text_hash, topic, topic_color, iso_fn(now), iso_fn(now), suggested_answer),
+            )
+            existing_hashes.add(text_hash)
+            generation_context.append(text)
+            inserted += 1
+
+    db.commit()
+    return inserted, requested_count - inserted
+
+
+def generate_answer_for_question(
+    question_id: int,
+    get_db_fn,
+    get_question_by_id_fn,
+    call_gemini_for_answer_fn,
+) -> str:
+    db = get_db_fn()
+    question = get_question_by_id_fn(question_id)
+    if question is None:
+        raise RuntimeError("Question not found.")
+
+    existing = (question["suggested_answer"] or "").strip()
+    if existing:
+        return existing
+
+    answer = call_gemini_for_answer_fn(question["text"], question["topic"])
+    db.execute(
+        "UPDATE questions SET suggested_answer = ? WHERE id = ?",
+        (answer, question_id),
+    )
+    db.commit()
+    return answer
+
+
+def format_http_error(exc) -> str:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return "Gemini API request failed."
+
+    status = response.status_code
+    reason = response.reason or "Error"
+    if status == 404:
+        return (
+            "Gemini model was not found. Set GEMINI_MODEL to a supported model "
+            "(for example: gemini-2.5-flash or gemini-3-flash-preview)."
+        )
+    if status == 429:
+        return "Gemini API rate limit exceeded. Please retry in a moment."
+    return f"Gemini API request failed ({status} {reason})."
