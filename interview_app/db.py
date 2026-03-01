@@ -1,6 +1,8 @@
+from collections.abc import Callable
 import sqlite3
 
 from flask import current_app, g
+from interview_app.utils import iso, now_utc
 
 
 def get_db() -> sqlite3.Connection:
@@ -16,16 +18,14 @@ def close_db(_error) -> None:
         db.close()
 
 
-def ensure_column(table: str, column: str, definition: str) -> None:
-    db = get_db()
+def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:
     cols = db.execute(f"PRAGMA table_info({table})").fetchall()
     names = {row["name"] for row in cols}
     if column not in names:
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
-def init_db() -> None:
-    db = get_db()
+def _apply_migration_0001_initial_schema(db: sqlite3.Connection) -> None:
     db.executescript(
         """
         CREATE TABLE IF NOT EXISTS questions (
@@ -33,11 +33,9 @@ def init_db() -> None:
             text TEXT NOT NULL,
             text_hash TEXT NOT NULL UNIQUE,
             topic TEXT,
-            topic_color TEXT,
             created_at TEXT NOT NULL,
             last_reviewed_at TEXT,
             next_review_at TEXT NOT NULL,
-            suggested_answer TEXT,
             repetitions INTEGER NOT NULL DEFAULT 0,
             interval_days INTEGER NOT NULL DEFAULT 0,
             ease_factor REAL NOT NULL DEFAULT 2.5
@@ -69,6 +67,51 @@ def init_db() -> None:
         );
         """
     )
-    ensure_column("questions", "suggested_answer", "TEXT")
-    ensure_column("questions", "topic_color", "TEXT")
+
+
+def _apply_migration_0002_add_suggested_answer(db: sqlite3.Connection) -> None:
+    _ensure_column(db, "questions", "suggested_answer", "TEXT")
+
+
+def _apply_migration_0003_add_topic_color(db: sqlite3.Connection) -> None:
+    _ensure_column(db, "questions", "topic_color", "TEXT")
+
+
+MIGRATIONS: tuple[tuple[str, Callable[[sqlite3.Connection], None]], ...] = (
+    ("0001_initial_schema", _apply_migration_0001_initial_schema),
+    ("0002_add_suggested_answer", _apply_migration_0002_add_suggested_answer),
+    ("0003_add_topic_color", _apply_migration_0003_add_topic_color),
+)
+
+
+def run_migrations() -> list[str]:
+    db = get_db()
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )
+        """
+    )
+    applied_rows = db.execute("SELECT version FROM schema_migrations").fetchall()
+    applied_versions = {str(row["version"]) for row in applied_rows}
+    applied_now: list[str] = []
+
+    for version, migration_fn in MIGRATIONS:
+        if version in applied_versions:
+            continue
+        migration_fn(db)
+        db.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+            (version, iso(now_utc())),
+        )
+        applied_now.append(version)
+
     db.commit()
+    return applied_now
+
+
+def init_db() -> None:
+    # Backward-compatible alias used by tests and older callers.
+    run_migrations()

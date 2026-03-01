@@ -41,7 +41,13 @@ GEMINI_MODEL=gemini-2.5-flash
 AUTO_GENERATE_ANSWERS=true
 ```
 
-4. Run app:
+4. Run migrations:
+
+```bash
+flask --app app db-upgrade
+```
+
+5. Run app:
 
 ```bash
 python app.py

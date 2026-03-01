@@ -1,6 +1,7 @@
 import os
 from typing import Any
 
+import click
 import requests
 from flask import redirect, request, url_for
 
@@ -21,7 +22,7 @@ from interview_app.constants import (
     TOPIC_TAG_COLORS,
     TOPIC_TAG_COLOR_BY_CODE,
 )
-from interview_app.db import get_db, init_db
+from interview_app.db import get_db, run_migrations
 from interview_app.presentation.app_factory import create_flask_app
 from interview_app.presentation.deps_factory import HandlerDepsInputs, build_handler_deps_bundle
 from interview_app.presentation.routes import register_routes
@@ -163,7 +164,15 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     app.extensions["build_handler_deps"] = build_handler_deps
     register_routes(app, build_handler_deps)
 
-    with app.app_context():
-        init_db()
+    @app.cli.command("db-upgrade")
+    def db_upgrade_command() -> None:
+        with app.app_context():
+            applied = run_migrations()
+        if not applied:
+            click.echo("Database is up to date.")
+            return
+        click.echo("Applied migrations:")
+        for version in applied:
+            click.echo(f"- {version}")
 
     return app
