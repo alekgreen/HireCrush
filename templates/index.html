@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card stats">
+  <h2>Dashboard</h2>
+  <p><strong>Total questions:</strong> {{ stats.total }}</p>
+  <p><strong>Due now:</strong> {{ stats.due }}</p>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('generate') }}">Generate Questions</a>
+    <a class="btn primary" href="{{ url_for('review') }}">Start Review</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Recent Questions</h2>
+  {% if recent %}
+    <ul>
+      {% for q in recent %}
+      <li>
+        <div class="question-text">{{ q.text }}</div>
+        <div class="meta">Topic: {{ q.topic or "General" }} | Added: {{ q.created_at }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No questions yet. Generate some first.</p>
+  {% endif %}
+</section>
+{% endblock %}

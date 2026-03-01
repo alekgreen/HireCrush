@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>Generate New Questions</h2>
+  <form method="post" class="form">
+    <label for="topic">Topic / role</label>
+    <input id="topic" name="topic" type="text" placeholder="e.g. Python backend, system design, data structures" required>
+
+    <label for="count">How many</label>
+    <input id="count" name="count" type="number" min="1" max="20" value="5" required>
+
+    <button class="btn primary" type="submit">Generate Unique Questions</button>
+  </form>
+</section>
+{% endblock %}

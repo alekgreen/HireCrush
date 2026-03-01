@@ -1,0 +1,191 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  color: #13212f;
+  background: linear-gradient(180deg, #f5f8fc 0%, #edf4ff 100%);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #0f2942;
+  color: #fff;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.header h1 a,
+.header nav a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.header nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.container {
+  max-width: 980px;
+  margin: 1.25rem auto;
+  padding: 0 1rem;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #d8e2f2;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.messages {
+  margin-bottom: 0.9rem;
+}
+
+.message {
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.message.success {
+  background: #d9f7df;
+  border: 1px solid #a3ddb2;
+}
+
+.message.error {
+  background: #ffe2e2;
+  border: 1px solid #e4aeae;
+}
+
+.message.info {
+  background: #e2ecff;
+  border: 1px solid #bbcff9;
+}
+
+.form {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 560px;
+}
+
+input[type="text"],
+input[type="number"] {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #bccde2;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.actions,
+.review-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-block;
+  border: 1px solid #98abc9;
+  background: #f2f6ff;
+  color: #112236;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn.primary {
+  background: #1967d2;
+  border-color: #1967d2;
+  color: #fff;
+}
+
+.btn.success {
+  background: #18794e;
+  border-color: #18794e;
+  color: #fff;
+}
+
+.btn.danger {
+  background: #be3b3b;
+  border-color: #be3b3b;
+  color: #fff;
+}
+
+.question-text {
+  font-size: 1.03rem;
+  line-height: 1.45;
+}
+
+.meta {
+  color: #506277;
+  font-size: 0.88rem;
+}
+
+ul {
+  padding-left: 1rem;
+}
+
+li {
+  margin-bottom: 0.7rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  border: 1px solid #dbe3ef;
+  padding: 0.45rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+@media (max-width: 720px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  table,
+  thead,
+  tbody,
+  th,
+  td,
+  tr {
+    display: block;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tr {
+    margin-bottom: 0.7rem;
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    padding: 0.55rem;
+    background: #fff;
+  }
+
+  td {
+    border: none;
+    padding: 0.25rem 0;
+  }
+}

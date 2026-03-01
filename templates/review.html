@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>Review</h2>
+  <p><strong>Due now:</strong> {{ stats.due }} | <strong>Total:</strong> {{ stats.total }}</p>
+
+  {% if question %}
+    <article class="review-question">
+      <p class="question-text">{{ question.text }}</p>
+      <p class="meta">Topic: {{ question.topic or "General" }}</p>
+    </article>
+    <form method="post" action="{{ url_for('review_submit', question_id=question.id) }}" class="review-actions">
+      <button class="btn danger" type="submit" name="grade" value="again">Again</button>
+      <button class="btn" type="submit" name="grade" value="hard">Hard</button>
+      <button class="btn primary" type="submit" name="grade" value="good">Good</button>
+      <button class="btn success" type="submit" name="grade" value="easy">Easy</button>
+    </form>
+  {% else %}
+    <p>No questions are currently due.</p>
+    {% if upcoming %}
+      <p class="meta">Next question at: {{ upcoming.next_review_at }}</p>
+    {% endif %}
+    <a class="btn" href="{{ url_for('generate') }}">Generate More</a>
+  {% endif %}
+</section>
+{% endblock %}
