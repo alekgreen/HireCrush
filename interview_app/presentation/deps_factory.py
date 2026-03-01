@@ -22,6 +22,7 @@ class HomeQueryInputs:
 @dataclass(frozen=True)
 class GenerationFlowInputs:
     add_questions_fn: Callable[..., tuple[int, int]]
+    add_code_review_questions_fn: Callable[..., tuple[int, int]]
     format_http_error_fn: Callable[..., str]
     get_recent_topic_color_fn: Callable[[str], str | None]
     get_existing_topics_fn: Callable[..., list[str]]
@@ -48,6 +49,7 @@ class ReviewFlowInputs:
     review_redirect_fn: Callable[..., Any]
     generate_answer_for_question_fn: Callable[[int], str]
     call_gemini_for_feedback_fn: Callable[..., dict]
+    call_gemini_for_code_review_feedback_fn: Callable[..., dict]
     save_feedback_fn: Callable[[int, str, dict], None]
     normalize_audio_mime_type_fn: Callable[[str], str | None]
     call_gemini_for_transcription_fn: Callable[[bytes, str], str]
@@ -71,6 +73,7 @@ class PresentationOptions:
     topic_tag_color_by_code: dict[str, str]
     default_topic_tag_color_code: str
     max_inline_audio_bytes: int
+    question_types: list[tuple[str, str]]
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,7 @@ def build_handler_deps_bundle(
         ),
         generation=GenerationHandlerDeps(
             add_questions_fn=inputs.generation.add_questions_fn,
+            add_code_review_questions_fn=inputs.generation.add_code_review_questions_fn,
             format_http_error_fn=inputs.generation.format_http_error_fn,
             get_recent_topic_color_fn=inputs.generation.get_recent_topic_color_fn,
             get_existing_topics_fn=inputs.generation.get_existing_topics_fn,
@@ -105,6 +109,7 @@ def build_handler_deps_bundle(
             topic_tag_colors=inputs.options.topic_tag_colors,
             topic_tag_color_by_code=inputs.options.topic_tag_color_by_code,
             default_topic_tag_color_code=inputs.options.default_topic_tag_color_code,
+            question_types=inputs.options.question_types,
         ),
         review=ReviewHandlerDeps(
             get_stats_fn=inputs.review.get_stats_fn,
@@ -122,6 +127,7 @@ def build_handler_deps_bundle(
             review_redirect_fn=inputs.review.review_redirect_fn,
             generate_answer_for_question_fn=inputs.review.generate_answer_for_question_fn,
             call_gemini_for_feedback_fn=inputs.review.call_gemini_for_feedback_fn,
+            call_gemini_for_code_review_feedback_fn=inputs.review.call_gemini_for_code_review_feedback_fn,
             save_feedback_fn=inputs.review.save_feedback_fn,
             normalize_audio_mime_type_fn=inputs.review.normalize_audio_mime_type_fn,
             call_gemini_for_transcription_fn=inputs.review.call_gemini_for_transcription_fn,
@@ -149,6 +155,7 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
             ),
             generation=GenerationFlowInputs(
                 add_questions_fn=namespace.add_questions,
+                add_code_review_questions_fn=namespace.add_code_review_questions,
                 format_http_error_fn=namespace.format_http_error,
                 get_recent_topic_color_fn=namespace.get_recent_topic_color,
                 get_existing_topics_fn=namespace.get_existing_topics,
@@ -170,6 +177,7 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 review_redirect_fn=namespace.review_redirect,
                 generate_answer_for_question_fn=namespace.generate_answer_for_question,
                 call_gemini_for_feedback_fn=namespace.call_gemini_for_feedback,
+                call_gemini_for_code_review_feedback_fn=namespace.call_gemini_for_code_review_feedback,
                 save_feedback_fn=namespace.save_feedback,
                 normalize_audio_mime_type_fn=namespace.normalize_audio_mime_type,
                 call_gemini_for_transcription_fn=namespace.call_gemini_for_transcription,
@@ -189,6 +197,7 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 topic_tag_color_by_code=namespace.TOPIC_TAG_COLOR_BY_CODE,
                 default_topic_tag_color_code=namespace.DEFAULT_TOPIC_TAG_COLOR_CODE,
                 max_inline_audio_bytes=namespace.MAX_INLINE_AUDIO_BYTES,
+                question_types=namespace.QUESTION_TYPES,
             ),
         ),
     )

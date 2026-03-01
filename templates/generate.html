@@ -10,6 +10,16 @@
 
   <form method="post" class="mt-5 space-y-4">
     <div>
+      <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="question_type">Question type</label>
+      <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="question_type" name="question_type">
+        {% for code, label in question_types %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400" id="question_type_hint">Theory Q&amp;A: open-ended questions answered in text. Code Review: a buggy code snippet the candidate must fix.</p>
+    </div>
+
+    <div>
       <label class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="topic_select">Existing topic</label>
       <select class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="topic_select" name="topic_select">
         <option value="">Select a saved topic (optional)</option>
@@ -72,7 +82,29 @@
       <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Applied to newly generated questions for this topic.</p>
     </div>
 
-    <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Generate Unique Questions</button>
+    <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit" id="generate_btn">Generate Unique Questions</button>
   </form>
+  <script>
+    (() => {
+      const typeSelect = document.getElementById("question_type");
+      const hint = document.getElementById("question_type_hint");
+      const btn = document.getElementById("generate_btn");
+      const hints = {
+        "theory": "Theory Q&A: open-ended questions answered in text.",
+        "code_review": "Code Review: Gemini writes buggy code that the candidate must fix and comment on during review."
+      };
+      const labels = {
+        "theory": "Generate Unique Questions",
+        "code_review": "Generate Code Review Challenges"
+      };
+      if (typeSelect && hint && btn) {
+        typeSelect.addEventListener("change", () => {
+          const v = typeSelect.value;
+          hint.textContent = hints[v] || hints["theory"];
+          btn.textContent = labels[v] || labels["theory"];
+        });
+      }
+    })();
+  </script>
 </section>
 {% endblock %}

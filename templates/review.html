@@ -1,4 +1,14 @@
 {% extends "base.html" %}
+{% block extra_head %}
+{% if question and question.question_type == 'code_review' %}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
+  <style>
+    .CodeMirror { height: auto; min-height: 260px; font-size: 0.875rem; border-radius: 0.5rem; }
+    html.dark .CodeMirror { border-color: #3f3f46; }
+  </style>
+{% endif %}
+{% endblock %}
 {% block content %}
 <section class="space-y-4">
   <header class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
@@ -29,6 +39,9 @@
     <div class="grid gap-4 lg:grid-cols-5">
       <div class="space-y-4 lg:col-span-3">
         <article class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
+          {% if question.question_type == 'code_review' %}
+            <span class="mb-3 inline-flex items-center gap-1 rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Code Review</span>
+          {% endif %}
           <p class="text-[1.06rem] leading-relaxed text-slate-900 dark:text-zinc-100">{{ question.text }}</p>
           <p class="mt-3 text-sm text-slate-500 dark:text-zinc-400">
             Topic:
@@ -69,43 +82,68 @@
         </section>
 
         <section class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
-          <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100">Your Answer</h3>
-          <form class="mt-3 space-y-3" method="post" action="{{ url_for('review_feedback', question_id=question.id) }}">
-            {% for topic in selected_topics %}
-              <input type="hidden" name="topics" value="{{ topic }}">
-            {% endfor %}
-            {% for subtopic in selected_subtopics %}
-              <input type="hidden" name="subtopics" value="{{ subtopic.value }}">
-            {% endfor %}
-            {% if randomize %}
-              <input type="hidden" name="randomize" value="1">
-            {% endif %}
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4 dark:border-zinc-700 dark:bg-zinc-800/80">
-              <div class="flex items-start justify-between gap-2">
-                <div>
-                  <p class="text-sm font-semibold text-slate-700 dark:text-zinc-200">Voice Input (Gemini transcription)</p>
-                  <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Record, transcribe, and edit before submitting.</p>
+          {% if question.question_type == 'code_review' %}
+            <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100">Your Code Review</h3>
+            <p class="mt-1 text-sm text-slate-500 dark:text-zinc-400">Edit the code below to fix the issues and add comments explaining your changes. Then submit for Gemini feedback.</p>
+            <form class="mt-3 space-y-3" method="post" action="{{ url_for('review_feedback', question_id=question.id) }}" id="code-review-form">
+              {% for topic in selected_topics %}
+                <input type="hidden" name="topics" value="{{ topic }}">
+              {% endfor %}
+              {% for subtopic in selected_subtopics %}
+                <input type="hidden" name="subtopics" value="{{ subtopic.value }}">
+              {% endfor %}
+              {% if randomize %}
+                <input type="hidden" name="randomize" value="1">
+              {% endif %}
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs text-slate-500 dark:text-zinc-400">Language: <code class="rounded bg-slate-100 px-1 dark:bg-zinc-800">{{ question.code_language or 'unknown' }}</code></p>
+                <button type="button" id="code-reset-btn" class="rounded-lg border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700">Reset to original</button>
+              </div>
+              <div class="overflow-hidden rounded-lg border border-slate-300 dark:border-zinc-700" id="code-editor-wrapper">
+                <textarea id="code-editor" name="code-editor-raw">{{ question.code_snippet or '' }}</textarea>
+              </div>
+              <textarea class="hidden" id="user_answer" name="user_answer" required>{{ question.code_snippet or '' }}</textarea>
+              <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Get Gemini Feedback</button>
+            </form>
+          {% else %}
+            <h3 class="font-display text-xl text-slate-900 dark:text-zinc-100">Your Answer</h3>
+            <form class="mt-3 space-y-3" method="post" action="{{ url_for('review_feedback', question_id=question.id) }}">
+              {% for topic in selected_topics %}
+                <input type="hidden" name="topics" value="{{ topic }}">
+              {% endfor %}
+              {% for subtopic in selected_subtopics %}
+                <input type="hidden" name="subtopics" value="{{ subtopic.value }}">
+              {% endfor %}
+              {% if randomize %}
+                <input type="hidden" name="randomize" value="1">
+              {% endif %}
+              <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4 dark:border-zinc-700 dark:bg-zinc-800/80">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <p class="text-sm font-semibold text-slate-700 dark:text-zinc-200">Voice Input (Gemini transcription)</p>
+                    <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Record, transcribe, and edit before submitting.</p>
+                  </div>
+                  <button class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" id="voice-settings-open" type="button" aria-label="Voice settings" title="Voice settings">
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path d="M8 2h4l.6 2.1a6.9 6.9 0 0 1 1.4.8l2-.8 2 3.5-1.6 1.5c.1.5.2 1 .2 1.5s-.1 1-.2 1.5l1.6 1.5-2 3.5-2-.8c-.4.3-.9.6-1.4.8L12 18H8l-.6-2.1a6.9 6.9 0 0 1-1.4-.8l-2 .8-2-3.5 1.6-1.5a6.8 6.8 0 0 1 0-3L2 6.4l2-3.5 2 .8c.4-.3.9-.6 1.4-.8L8 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                      <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+                    </svg>
+                    Settings
+                  </button>
                 </div>
-                <button class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" id="voice-settings-open" type="button" aria-label="Voice settings" title="Voice settings">
-                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M8 2h4l.6 2.1a6.9 6.9 0 0 1 1.4.8l2-.8 2 3.5-1.6 1.5c.1.5.2 1 .2 1.5s-.1 1-.2 1.5l1.6 1.5-2 3.5-2-.8c-.4.3-.9.6-1.4.8L12 18H8l-.6-2.1a6.9 6.9 0 0 1-1.4-.8l-2 .8-2-3.5 1.6-1.5a6.8 6.8 0 0 1 0-3L2 6.4l2-3.5 2 .8c.4-.3.9-.6 1.4-.8L8 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-                    <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/>
-                  </svg>
-                  Settings
-                </button>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button class="rounded-lg border border-brand-500 bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50" type="button" id="voice-start">Record</button>
+                  <button class="rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" type="button" id="voice-stop" disabled>Stop</button>
+                  <button class="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-200 dark:hover:bg-emerald-900/45" type="button" id="voice-transcribe" disabled>Transcribe</button>
+                </div>
+                <p class="mt-2 text-xs text-slate-600 dark:text-zinc-300" id="voice-status">Microphone idle.</p>
+                <audio class="mt-2 hidden w-full" id="voice-preview" controls></audio>
               </div>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button class="rounded-lg border border-brand-500 bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50" type="button" id="voice-start">Record</button>
-                <button class="rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" type="button" id="voice-stop" disabled>Stop</button>
-                <button class="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-200 dark:hover:bg-emerald-900/45" type="button" id="voice-transcribe" disabled>Transcribe</button>
-              </div>
-              <p class="mt-2 text-xs text-slate-600 dark:text-zinc-300" id="voice-status">Microphone idle.</p>
-              <audio class="mt-2 hidden w-full" id="voice-preview" controls></audio>
-            </div>
-            <label class="block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="user_answer">Write your answer</label>
-            <textarea class="min-h-[160px] w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="user_answer" name="user_answer" rows="7" placeholder="Type your answer here..." required></textarea>
-            <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Get Gemini Feedback</button>
-          </form>
+              <label class="block text-sm font-semibold text-slate-700 dark:text-zinc-200" for="user_answer">Write your answer</label>
+              <textarea class="min-h-[160px] w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-teal-500/30" id="user_answer" name="user_answer" rows="7" placeholder="Type your answer here..." required></textarea>
+              <button class="rounded-lg border border-brand-500 bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600" type="submit">Get Gemini Feedback</button>
+            </form>
+          {% endif %}
         </section>
 
         <form method="post" action="{{ url_for('review_submit', question_id=question.id) }}" class="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-soft md:p-5 dark:border-zinc-800 dark:bg-zinc-900/90">
@@ -168,7 +206,12 @@
                 {% endfor %}
               </ul>
             {% endif %}
-            <p class="mt-4 text-sm leading-relaxed text-slate-700 dark:text-zinc-200"><strong>Improved answer:</strong> {{ latest_feedback.improved_answer }}</p>
+            {% if question.question_type == 'code_review' %}
+              <p class="mt-4 text-sm font-semibold text-slate-700 dark:text-zinc-200">Correct solution:</p>
+              <pre class="mt-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200">{{ latest_feedback.improved_answer }}</pre>
+            {% else %}
+              <p class="mt-4 text-sm leading-relaxed text-slate-700 dark:text-zinc-200"><strong>Improved answer:</strong> {{ latest_feedback.improved_answer }}</p>
+            {% endif %}
           </section>
         {% else %}
           <section class="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 text-sm text-slate-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300">
@@ -187,7 +230,89 @@
     </section>
   {% endif %}
 </section>
-{% if question %}
+{% if question and question.question_type == 'code_review' %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/go/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/rust/rust.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+  <script>
+    (() => {
+      const langModeMap = {
+        python: "python",
+        javascript: "javascript",
+        typescript: "javascript",
+        java: "text/x-java",
+        c: "text/x-csrc",
+        "c++": "text/x-c++src",
+        cpp: "text/x-c++src",
+        "c#": "text/x-csharp",
+        csharp: "text/x-csharp",
+        go: "go",
+        rust: "rust",
+        bash: "shell",
+        sh: "shell",
+        shell: "shell",
+        sql: "sql",
+        kotlin: "text/x-kotlin",
+        swift: "text/x-swift",
+      };
+
+      const rawLang = {{ (question.code_language or '')|tojson }};
+      const mode = langModeMap[rawLang.toLowerCase()] || null;
+      const originalCode = {{ (question.code_snippet or '')|tojson }};
+      const isDark = document.documentElement.classList.contains("dark");
+
+      const editorTextarea = document.getElementById("code-editor");
+      const hiddenAnswer = document.getElementById("user_answer");
+      const form = document.getElementById("code-review-form");
+      const resetBtn = document.getElementById("code-reset-btn");
+
+      if (!editorTextarea || !hiddenAnswer || !form) return;
+
+      const editor = CodeMirror.fromTextArea(editorTextarea, {
+        mode: mode,
+        theme: isDark ? "monokai" : "default",
+        lineNumbers: true,
+        indentWithTabs: false,
+        indentUnit: 2,
+        tabSize: 2,
+        lineWrapping: true,
+        autofocus: false,
+      });
+
+      editor.setSize("100%", null);
+
+      const syncToHidden = () => {
+        hiddenAnswer.value = editor.getValue();
+      };
+
+      editor.on("change", syncToHidden);
+      syncToHidden();
+
+      form.addEventListener("submit", syncToHidden);
+
+      if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+          editor.setValue(originalCode);
+          editor.clearHistory();
+          syncToHidden();
+        });
+      }
+
+      // Keep theme in sync if user toggles dark mode
+      const observer = new MutationObserver(() => {
+        const dark = document.documentElement.classList.contains("dark");
+        editor.setOption("theme", dark ? "monokai" : "default");
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    })();
+  </script>
+{% endif %}
+{% if question and question.question_type != 'code_review' %}
   <div class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[1px]" id="voice-settings-modal" role="dialog" aria-modal="true" aria-labelledby="voice-settings-title">
     <div class="w-full max-w-sm rounded-2xl border border-white/70 bg-white p-4 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
       <div class="flex items-start justify-between gap-3">

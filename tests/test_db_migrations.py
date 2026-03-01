@@ -7,6 +7,14 @@ from interview_app.db import (
     run_migrations,
 )
 
+EXPECTED_MIGRATIONS = [
+    "0001_initial_schema",
+    "0002_add_suggested_answer",
+    "0003_add_topic_color",
+    "0004_add_subtopic",
+    "0005_add_code_review",
+]
+
 
 def test_run_migrations_records_versions(tmp_path):
     flask_app.config.update(
@@ -15,18 +23,12 @@ def test_run_migrations_records_versions(tmp_path):
     )
     with flask_app.app_context():
         applied = run_migrations()
-        expected = [
-            "0001_initial_schema",
-            "0002_add_suggested_answer",
-            "0003_add_topic_color",
-            "0004_add_subtopic",
-        ]
-        assert applied == expected
+        assert applied == EXPECTED_MIGRATIONS
 
         rows = get_db().execute(
             "SELECT version FROM schema_migrations ORDER BY version ASC"
         ).fetchall()
-        assert [row["version"] for row in rows] == expected
+        assert [row["version"] for row in rows] == EXPECTED_MIGRATIONS
 
 
 def test_run_migrations_is_idempotent(tmp_path):
@@ -38,12 +40,7 @@ def test_run_migrations_is_idempotent(tmp_path):
         first_run = run_migrations()
         second_run = run_migrations()
 
-        assert first_run == [
-            "0001_initial_schema",
-            "0002_add_suggested_answer",
-            "0003_add_topic_color",
-            "0004_add_subtopic",
-        ]
+        assert first_run == EXPECTED_MIGRATIONS
         assert second_run == []
 
 
@@ -53,18 +50,8 @@ def test_migration_status_helpers(tmp_path):
         DATABASE=str(tmp_path / "status.db"),
     )
     with flask_app.app_context():
-        assert list_known_migrations() == [
-            "0001_initial_schema",
-            "0002_add_suggested_answer",
-            "0003_add_topic_color",
-            "0004_add_subtopic",
-        ]
-        assert list_pending_migrations() == [
-            "0001_initial_schema",
-            "0002_add_suggested_answer",
-            "0003_add_topic_color",
-            "0004_add_subtopic",
-        ]
+        assert list_known_migrations() == EXPECTED_MIGRATIONS
+        assert list_pending_migrations() == EXPECTED_MIGRATIONS
         assert list_applied_migrations() == []
 
         run_migrations()
@@ -72,10 +59,5 @@ def test_migration_status_helpers(tmp_path):
         applied = list_applied_migrations()
         pending = list_pending_migrations()
 
-        assert [version for version, _applied_at in applied] == [
-            "0001_initial_schema",
-            "0002_add_suggested_answer",
-            "0003_add_topic_color",
-            "0004_add_subtopic",
-        ]
+        assert [version for version, _applied_at in applied] == EXPECTED_MIGRATIONS
         assert pending == []

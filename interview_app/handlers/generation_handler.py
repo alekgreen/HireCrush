@@ -67,6 +67,7 @@ def generate_page(
             "language", deps.default_generation_language_code
         ).strip().lower()
         language = deps.generation_language_by_code.get(language_code)
+        question_type = request_obj.form.get("question_type", "theory").strip().lower()
 
         if not topic:
             flash_fn("Topic is required.", "error")
@@ -80,6 +81,9 @@ def generate_page(
         if topic_color_raw and topic_color_raw not in deps.topic_tag_color_by_code:
             flash_fn("Topic tag color is invalid.", "error")
             return redirect_fn(url_for_fn("generate"))
+        valid_question_types = {code for code, _ in deps.question_types}
+        if question_type not in valid_question_types:
+            question_type = "theory"
 
         resolved_topic_color = (
             topic_color_raw
@@ -101,19 +105,17 @@ def generate_page(
             }
             if subtopic:
                 add_kwargs["subtopic"] = subtopic
+
+            if question_type == "code_review":
+                add_fn = deps.add_code_review_questions_fn
+            else:
+                add_fn = deps.add_questions_fn
+
             try:
-                inserted, duplicates = deps.add_questions_fn(
-                    topic,
-                    count,
-                    **add_kwargs,
-                )
+                inserted, duplicates = add_fn(topic, count, **add_kwargs)
             except TypeError:
                 add_kwargs.pop("subtopic", None)
-                inserted, duplicates = deps.add_questions_fn(
-                    topic,
-                    count,
-                    **add_kwargs,
-                )
+                inserted, duplicates = add_fn(topic, count, **add_kwargs)
         except requests.HTTPError as exc:
             flash_fn(deps.format_http_error_fn(exc), "error")
             return redirect_fn(url_for_fn("generate"))
@@ -137,4 +139,5 @@ def generate_page(
         available_topics=available_topics,
         available_subtopics=available_subtopics,
         topic_tag_colors=deps.topic_tag_colors,
+        question_types=deps.question_types,
     )

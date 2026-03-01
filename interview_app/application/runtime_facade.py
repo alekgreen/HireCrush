@@ -11,6 +11,7 @@ class RuntimeCallables:
     get_normalize_audio_mime_type: Callable[[], Callable[[str], str | None]]
     get_call_gemini_for_questions: Callable[[], Callable[..., list[str]]]
     get_call_gemini_for_answer: Callable[[], Callable[..., str]]
+    get_call_gemini_for_code_review_questions: Callable[[], Callable[..., list[dict]]]
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class RuntimeConfigDeps:
     questions_json_schema: dict
     answer_json_schema: dict
     feedback_json_schema: dict
+    code_review_question_schema: dict
     default_topic_tag_color_code: str
     max_inline_audio_bytes: int
 
@@ -99,6 +101,7 @@ class RuntimeFacade:
         self._questions_json_schema = deps.config.questions_json_schema
         self._answer_json_schema = deps.config.answer_json_schema
         self._feedback_json_schema = deps.config.feedback_json_schema
+        self._code_review_question_schema = deps.config.code_review_question_schema
         self._default_topic_tag_color_code = deps.config.default_topic_tag_color_code
         self._max_inline_audio_bytes = deps.config.max_inline_audio_bytes
         self._runtime_callables = runtime_callables
@@ -175,6 +178,68 @@ class RuntimeFacade:
             user_answer=user_answer,
             generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
             feedback_json_schema=self._feedback_json_schema,
+        )
+
+    def call_gemini_for_code_review_questions(
+        self,
+        topic: str,
+        count: int,
+        language: str = "English",
+        existing_questions: list[str] | None = None,
+        additional_context: str | None = None,
+        subtopic: str | None = None,
+    ) -> list[dict]:
+        return self._generation_service.call_for_code_review_questions(
+            topic=topic,
+            count=count,
+            language=language,
+            existing_questions=existing_questions,
+            additional_context=additional_context,
+            generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
+            code_review_question_schema=self._code_review_question_schema,
+            subtopic=subtopic,
+        )
+
+    def call_gemini_for_code_review_feedback(
+        self,
+        question_text: str,
+        original_code: str,
+        user_code: str,
+        language: str,
+    ) -> dict:
+        return self._generation_service.call_for_code_review_feedback(
+            question_text=question_text,
+            original_code=original_code,
+            user_code=user_code,
+            language=language,
+            generate_json_fn=self._runtime_callables.get_gemini_generate_json(),
+            feedback_json_schema=self._feedback_json_schema,
+        )
+
+    def add_code_review_questions(
+        self,
+        topic: str,
+        requested_count: int,
+        language: str = "English",
+        additional_context: str | None = None,
+        topic_color: str = "",
+        subtopic: str | None = None,
+    ) -> tuple[int, int]:
+        resolved_topic_color = topic_color or self._default_topic_tag_color_code
+        return self._question_service.add_code_review_questions(
+            topic=topic,
+            subtopic=subtopic,
+            requested_count=requested_count,
+            language=language,
+            additional_context=additional_context,
+            topic_color=resolved_topic_color,
+            get_db_fn=self._get_db_fn,
+            get_generation_context_questions_fn=self._question_repository.get_generation_context_questions,
+            call_gemini_for_code_review_questions_fn=self._runtime_callables.get_call_gemini_for_code_review_questions(),
+            clean_question_text_fn=self._clean_question_text_fn,
+            question_hash_fn=self._question_hash_fn,
+            now_utc_fn=self._now_utc_fn,
+            iso_fn=self._iso_fn,
         )
 
     def add_questions(

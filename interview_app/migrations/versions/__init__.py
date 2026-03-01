@@ -6,6 +6,7 @@ from . import (
     v0002_add_suggested_answer,
     v0003_add_topic_color,
     v0004_add_subtopic,
+    v0005_add_code_review,
 )
 
 Migration = tuple[str, Callable[[sqlite3.Connection], None]]
@@ -15,4 +16,5 @@ MIGRATIONS: tuple[Migration, ...] = (
     (v0002_add_suggested_answer.VERSION, v0002_add_suggested_answer.apply),
     (v0003_add_topic_color.VERSION, v0003_add_topic_color.apply),
     (v0004_add_subtopic.VERSION, v0004_add_subtopic.apply),
+    (v0005_add_code_review.VERSION, v0005_add_code_review.apply),
 )

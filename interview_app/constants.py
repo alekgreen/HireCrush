@@ -105,6 +105,36 @@ TOPIC_TAG_STYLE_BY_CODE = {
     },
 }
 
+QUESTION_TYPE_THEORY = "theory"
+QUESTION_TYPE_CODE_REVIEW = "code_review"
+QUESTION_TYPES = [
+    (QUESTION_TYPE_THEORY, "Theory Q&A"),
+    (QUESTION_TYPE_CODE_REVIEW, "Code Review"),
+]
+
+CODE_REVIEW_QUESTION_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "question_text": {
+                "type": "string",
+                "description": "Description of what the candidate should find and fix in the code.",
+            },
+            "code_snippet": {
+                "type": "string",
+                "description": "The code containing intentional bugs, anti-patterns, or issues to be fixed.",
+            },
+            "language": {
+                "type": "string",
+                "description": "Programming language of the code snippet (e.g. python, javascript, java).",
+            },
+        },
+        "required": ["question_text", "code_snippet", "language"],
+    },
+    "minItems": 1,
+}
+
 QUESTIONS_JSON_SCHEMA = {
     "type": "array",
     "items": {

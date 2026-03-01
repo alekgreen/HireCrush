@@ -206,7 +206,10 @@ def review_feedback_action(
         deps=deps,
         request_obj=request_obj,
     )
-    if len(user_answer) < 20:
+
+    question_type = (question["question_type"] or "theory") if "question_type" in question.keys() else "theory"
+    min_answer_length = 5 if question_type == "code_review" else 20
+    if len(user_answer) < min_answer_length:
         flash_fn("Please enter a longer answer to get meaningful feedback.", "error")
         return deps.review_redirect_fn(
             topics=selected_topics,
@@ -217,12 +220,22 @@ def review_feedback_action(
 
     show_feedback = False
     try:
-        reference_answer = deps.generate_answer_for_question_fn(question_id)
-        result = deps.call_gemini_for_feedback_fn(
-            question=question["text"],
-            reference_answer=reference_answer,
-            user_answer=user_answer,
-        )
+        if question_type == "code_review":
+            original_code = (question["code_snippet"] or "") if "code_snippet" in question.keys() else ""
+            code_language = (question["code_language"] or "") if "code_language" in question.keys() else ""
+            result = deps.call_gemini_for_code_review_feedback_fn(
+                question_text=question["text"],
+                original_code=original_code,
+                user_code=user_answer,
+                language=code_language,
+            )
+        else:
+            reference_answer = deps.generate_answer_for_question_fn(question_id)
+            result = deps.call_gemini_for_feedback_fn(
+                question=question["text"],
+                reference_answer=reference_answer,
+                user_answer=user_answer,
+            )
         deps.save_feedback_fn(question_id, user_answer, result)
         show_feedback = True
         flash_fn("Feedback generated.", "success")

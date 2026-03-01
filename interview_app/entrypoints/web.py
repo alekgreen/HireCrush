@@ -22,12 +22,14 @@ from interview_app.adapters.persistence.sqlite.repositories import (
 )
 from interview_app.constants import (
     ANSWER_JSON_SCHEMA,
+    CODE_REVIEW_QUESTION_SCHEMA,
     DEFAULT_GENERATION_LANGUAGE_CODE,
     DEFAULT_TOPIC_TAG_COLOR_CODE,
     FEEDBACK_JSON_SCHEMA,
     GEMINI_MODEL_FALLBACKS,
     GENERATION_LANGUAGES,
     GENERATION_LANGUAGE_BY_CODE,
+    QUESTION_TYPES,
     QUESTIONS_JSON_SCHEMA,
     TOPIC_TAG_COLORS,
     TOPIC_TAG_COLOR_BY_CODE,
@@ -80,6 +82,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
         get_normalize_audio_mime_type=lambda: runtime_ref["runtime"].normalize_audio_mime_type,
         get_call_gemini_for_questions=lambda: runtime_ref["runtime"].call_gemini_for_questions,
         get_call_gemini_for_answer=lambda: runtime_ref["runtime"].call_gemini_for_answer,
+        get_call_gemini_for_code_review_questions=lambda: runtime_ref["runtime"].call_gemini_for_code_review_questions,
     )
     runtime_deps = RuntimeDependencies(
         infra=RuntimeInfraDeps(
@@ -111,6 +114,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
             questions_json_schema=QUESTIONS_JSON_SCHEMA,
             answer_json_schema=ANSWER_JSON_SCHEMA,
             feedback_json_schema=FEEDBACK_JSON_SCHEMA,
+            code_review_question_schema=CODE_REVIEW_QUESTION_SCHEMA,
             default_topic_tag_color_code=DEFAULT_TOPIC_TAG_COLOR_CODE,
             max_inline_audio_bytes=gemini_service.MAX_INLINE_AUDIO_BYTES,
         ),
@@ -154,6 +158,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
             ),
             generation=GenerationFlowInputs(
                 add_questions_fn=runtime.add_questions,
+                add_code_review_questions_fn=runtime.add_code_review_questions,
                 format_http_error_fn=runtime.format_http_error,
                 get_recent_topic_color_fn=question_repository.get_recent_topic_color,
                 get_existing_topics_fn=question_repository.get_existing_topics,
@@ -175,6 +180,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 review_redirect_fn=review_redirect,
                 generate_answer_for_question_fn=runtime.generate_answer_for_question,
                 call_gemini_for_feedback_fn=runtime.call_gemini_for_feedback,
+                call_gemini_for_code_review_feedback_fn=runtime.call_gemini_for_code_review_feedback,
                 save_feedback_fn=feedback_repository.save_feedback,
                 normalize_audio_mime_type_fn=runtime.normalize_audio_mime_type,
                 call_gemini_for_transcription_fn=runtime.call_gemini_for_transcription,
@@ -194,6 +200,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 topic_tag_color_by_code=TOPIC_TAG_COLOR_BY_CODE,
                 default_topic_tag_color_code=DEFAULT_TOPIC_TAG_COLOR_CODE,
                 max_inline_audio_bytes=gemini_service.MAX_INLINE_AUDIO_BYTES,
+                question_types=QUESTION_TYPES,
             ),
         ),
     )
