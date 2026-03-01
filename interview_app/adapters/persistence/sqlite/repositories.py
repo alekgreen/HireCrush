@@ -4,7 +4,7 @@ from typing import Any
 
 from interview_app.application.ports.repositories import FeedbackRepository, QuestionRepository
 from interview_app.db import get_db
-from interview_app.utils import iso, now_utc
+from interview_app.utils import clean_question_text, iso, now_utc, question_hash
 
 
 class SQLiteQuestionRepository(QuestionRepository):
@@ -380,6 +380,152 @@ class SQLiteQuestionRepository(QuestionRepository):
             """,
             (topic_clean, subtopic_clean, limit),
         ).fetchall()
+
+    def _delete_questions_by_ids(self, question_ids: list[int]) -> int:
+        if not question_ids:
+            return 0
+        db = self._get_db()
+        placeholders = ", ".join("?" for _ in question_ids)
+        params = tuple(question_ids)
+        db.execute(
+            f"DELETE FROM review_feedback WHERE question_id IN ({placeholders})",
+            params,
+        )
+        db.execute(
+            f"DELETE FROM review_history WHERE question_id IN ({placeholders})",
+            params,
+        )
+        cursor = db.execute(
+            f"DELETE FROM questions WHERE id IN ({placeholders})",
+            params,
+        )
+        db.commit()
+        return max(0, int(cursor.rowcount or 0))
+
+    def update_question(
+        self,
+        question_id: int,
+        *,
+        text: str,
+        topic: str | None,
+        subtopic: str | None,
+    ) -> bool:
+        db = self._get_db()
+        text_clean = clean_question_text(str(text or ""))
+        if len(text_clean) < 10:
+            raise ValueError("Question text must be at least 10 characters.")
+
+        topic_clean = str(topic or "").strip()
+        subtopic_clean = str(subtopic or "").strip()
+        if not topic_clean:
+            topic_value = None
+            subtopic_value = None
+        else:
+            topic_value = topic_clean
+            subtopic_value = subtopic_clean or None
+
+        cursor = db.execute(
+            """
+            UPDATE questions
+            SET text = ?, text_hash = ?, topic = ?, subtopic = ?
+            WHERE id = ?
+            """,
+            (
+                text_clean,
+                question_hash(text_clean),
+                topic_value,
+                subtopic_value,
+                int(question_id),
+            ),
+        )
+        db.commit()
+        return cursor.rowcount > 0
+
+    def delete_question(self, question_id: int) -> bool:
+        deleted = self._delete_questions_by_ids([int(question_id)])
+        return deleted > 0
+
+    def rename_topic(self, topic: str, new_topic: str) -> int:
+        db = self._get_db()
+        topic_clean = str(topic or "").strip()
+        new_topic_clean = str(new_topic or "").strip()
+        if not topic_clean:
+            raise ValueError("Topic is required.")
+        if not new_topic_clean:
+            raise ValueError("New topic is required.")
+
+        cursor = db.execute(
+            """
+            UPDATE questions
+            SET topic = ?
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+            """,
+            (new_topic_clean, topic_clean),
+        )
+        db.commit()
+        return max(0, int(cursor.rowcount or 0))
+
+    def delete_topic(self, topic: str) -> int:
+        db = self._get_db()
+        topic_clean = str(topic or "").strip()
+        if not topic_clean:
+            raise ValueError("Topic is required.")
+
+        rows = db.execute(
+            """
+            SELECT id
+            FROM questions
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+            """,
+            (topic_clean,),
+        ).fetchall()
+        question_ids = [int(row["id"]) for row in rows]
+        return self._delete_questions_by_ids(question_ids)
+
+    def rename_subtopic(self, topic: str, subtopic: str, new_subtopic: str) -> int:
+        db = self._get_db()
+        topic_clean = str(topic or "").strip()
+        subtopic_clean = str(subtopic or "").strip()
+        new_subtopic_clean = str(new_subtopic or "").strip()
+        if not topic_clean:
+            raise ValueError("Topic is required.")
+        if not subtopic_clean:
+            raise ValueError("Subtopic is required.")
+        if not new_subtopic_clean:
+            raise ValueError("New subtopic is required.")
+
+        cursor = db.execute(
+            """
+            UPDATE questions
+            SET subtopic = ?
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+              AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
+            """,
+            (new_subtopic_clean, topic_clean, subtopic_clean),
+        )
+        db.commit()
+        return max(0, int(cursor.rowcount or 0))
+
+    def delete_subtopic(self, topic: str, subtopic: str) -> int:
+        db = self._get_db()
+        topic_clean = str(topic or "").strip()
+        subtopic_clean = str(subtopic or "").strip()
+        if not topic_clean:
+            raise ValueError("Topic is required.")
+        if not subtopic_clean:
+            raise ValueError("Subtopic is required.")
+
+        rows = db.execute(
+            """
+            SELECT id
+            FROM questions
+            WHERE LOWER(COALESCE(topic, '')) = LOWER(?)
+              AND LOWER(COALESCE(subtopic, '')) = LOWER(?)
+            """,
+            (topic_clean, subtopic_clean),
+        ).fetchall()
+        question_ids = [int(row["id"]) for row in rows]
+        return self._delete_questions_by_ids(question_ids)
 
 
 class SQLiteFeedbackRepository(FeedbackRepository):

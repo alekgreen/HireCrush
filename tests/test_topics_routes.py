@@ -65,3 +65,80 @@ def test_topics_route_detail_formats_next_review_datetime(client):
     assert res.status_code == 200
     assert f"Next review: {format_datetime(iso(dt))}" in body
     assert "2026-03-01T16:11:01+00:00" not in body
+
+
+def test_topics_route_can_rename_topic(client):
+    insert_question("Explain Python decorators.", topic="python")
+
+    response = client.post(
+        "/topics/edit",
+        data={"topic": "python", "new_topic": "python-core", "next": "/topics?topic=python"},
+        follow_redirects=True,
+    )
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Renamed topic for 1 question(s)." in body
+    assert "python-core" in body
+
+
+def test_topics_route_can_rename_and_delete_subtopic(client):
+    insert_question("How do Kubernetes pods get scheduled?", topic="devops", subtopic="kubernetes")
+
+    rename_response = client.post(
+        "/subtopics/edit",
+        data={
+            "topic": "devops",
+            "subtopic": "kubernetes",
+            "new_subtopic": "orchestration",
+            "next": "/topics?topic=devops&subtopic=kubernetes",
+        },
+        follow_redirects=True,
+    )
+    rename_body = rename_response.data.decode("utf-8")
+    assert rename_response.status_code == 200
+    assert "Renamed subtopic for 1 question(s)." in rename_body
+    assert "orchestration" in rename_body
+
+    delete_response = client.post(
+        "/subtopics/delete",
+        data={
+            "topic": "devops",
+            "subtopic": "orchestration",
+            "next": "/topics?topic=devops&subtopic=orchestration",
+        },
+        follow_redirects=True,
+    )
+    delete_body = delete_response.data.decode("utf-8")
+    assert delete_response.status_code == 200
+    assert "Deleted 1 question(s) from subtopic." in delete_body
+    assert "No questions found for this selection." in delete_body
+
+
+def test_topics_route_can_edit_and_delete_question(client):
+    question_id = insert_question("Explain Python decorators.", topic="python")
+
+    edit_response = client.post(
+        f"/questions/{question_id}/edit",
+        data={
+            "text": "Explain Python decorators with practical use cases.",
+            "topic": "python",
+            "subtopic": "metaprogramming",
+            "next": "/topics?topic=python",
+        },
+        follow_redirects=True,
+    )
+    edit_body = edit_response.data.decode("utf-8")
+    assert edit_response.status_code == 200
+    assert "Question updated." in edit_body
+    assert "Explain Python decorators with practical use cases." in edit_body
+
+    delete_response = client.post(
+        f"/questions/{question_id}/delete",
+        data={"next": "/topics?topic=python"},
+        follow_redirects=True,
+    )
+    delete_body = delete_response.data.decode("utf-8")
+    assert delete_response.status_code == 200
+    assert "Question deleted." in delete_body
+    assert "No questions found for this selection." in delete_body

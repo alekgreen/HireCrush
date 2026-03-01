@@ -64,6 +64,12 @@ class CatalogQueryInputs:
     list_questions_by_subtopic_fn: Callable[..., Any]
     list_topics_with_stats_fn: Callable[..., Any]
     list_subtopics_with_stats_fn: Callable[..., Any]
+    update_question_fn: Callable[..., bool]
+    delete_question_fn: Callable[[int], bool]
+    rename_topic_fn: Callable[[str, str], int]
+    delete_topic_fn: Callable[[str], int]
+    rename_subtopic_fn: Callable[[str, str, str], int]
+    delete_subtopic_fn: Callable[[str, str], int]
 
 
 @dataclass(frozen=True)
@@ -144,6 +150,12 @@ def build_handler_deps_bundle(
             list_questions_by_subtopic_fn=inputs.catalog.list_questions_by_subtopic_fn,
             list_topics_with_stats_fn=inputs.catalog.list_topics_with_stats_fn,
             list_subtopics_with_stats_fn=inputs.catalog.list_subtopics_with_stats_fn,
+            update_question_fn=inputs.catalog.update_question_fn,
+            delete_question_fn=inputs.catalog.delete_question_fn,
+            rename_topic_fn=inputs.catalog.rename_topic_fn,
+            delete_topic_fn=inputs.catalog.delete_topic_fn,
+            rename_subtopic_fn=inputs.catalog.rename_subtopic_fn,
+            delete_subtopic_fn=inputs.catalog.delete_subtopic_fn,
         ),
     )
 
@@ -194,6 +206,12 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 list_questions_by_subtopic_fn=namespace.list_questions_by_subtopic,
                 list_topics_with_stats_fn=namespace.list_topics_with_stats,
                 list_subtopics_with_stats_fn=namespace.list_subtopics_with_stats,
+                update_question_fn=namespace.update_question,
+                delete_question_fn=namespace.delete_question,
+                rename_topic_fn=namespace.rename_topic,
+                delete_topic_fn=namespace.delete_topic,
+                rename_subtopic_fn=namespace.rename_subtopic,
+                delete_subtopic_fn=namespace.delete_subtopic,
             ),
             options=PresentationOptions(
                 default_generation_language_code=namespace.DEFAULT_GENERATION_LANGUAGE_CODE,

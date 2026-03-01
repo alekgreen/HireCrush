@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% set current_path = request.full_path if request.query_string else request.path %}
 <section class="space-y-4">
   <header class="rounded-2xl border border-white/70 bg-white/90 p-5 shadow-soft md:p-6 dark:border-zinc-800 dark:bg-zinc-900/90">
     <p class="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-400">Knowledge map</p>
@@ -31,18 +32,75 @@
         <span class="text-sm text-slate-500 dark:text-zinc-400">{{ topic_questions|length }} question(s)</span>
         <a class="ml-auto rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics') }}">Back to all topics</a>
       </div>
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <button type="button" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" onclick="document.getElementById('edit-topic-selected').showModal()">Edit topic</button>
+        <dialog id="edit-topic-selected" class="w-full max-w-xl rounded-xl border border-slate-300 bg-white p-0 shadow-xl backdrop:bg-slate-900/35 dark:border-zinc-700 dark:bg-zinc-900 dark:backdrop:bg-black/60">
+          <div class="border-b border-slate-200 px-4 py-3 dark:border-zinc-700">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-zinc-100">Edit topic</h3>
+          </div>
+          <form class="grid gap-2 p-4" method="post" action="{{ url_for('topic_rename') }}">
+            <input type="hidden" name="next" value="{{ current_path }}">
+            <input type="hidden" name="topic" value="{{ selected_topic }}">
+            <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-new-name">New topic name</label>
+            <input id="topic-new-name" name="new_topic" value="{{ selected_topic }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+            <div class="mt-2 flex items-center justify-end gap-2">
+              <button type="button" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" onclick="document.getElementById('edit-topic-selected').close()">Cancel</button>
+              <button type="submit" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600">Save topic</button>
+            </div>
+          </form>
+        </dialog>
+        <form method="post" action="{{ url_for('topic_delete') }}" onsubmit="return confirm('Delete this topic and all its questions? This also removes review history and feedback.');">
+          <input type="hidden" name="next" value="{{ current_path }}">
+          <input type="hidden" name="topic" value="{{ selected_topic }}">
+          <button type="submit" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700">Delete topic</button>
+        </form>
+      </div>
+
       {% set selected_topic_subtopics = topic_subtopics.get(selected_topic, []) %}
       {% if selected_topic_subtopics and not selected_subtopic %}
-        <div class="mb-4 flex flex-wrap items-center gap-2">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
           <a class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" href="{{ url_for('topics', topic=selected_topic) }}">All subtopics</a>
           {% for subtopic in selected_topic_subtopics %}
             <a class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }} ({{ subtopic.total_questions }})</a>
           {% endfor %}
         </div>
+        <div class="mb-4 grid gap-2">
+          {% for subtopic in selected_topic_subtopics %}
+            <div class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/70">
+              <a class="font-semibold text-slate-700 hover:underline dark:text-zinc-100" href="{{ url_for('topics', topic=selected_topic, subtopic=subtopic.subtopic) }}">{{ subtopic.subtopic }}</a>
+              <span class="text-slate-500 dark:text-zinc-400">{{ subtopic.total_questions }} question(s)</span>
+            </div>
+          {% endfor %}
+        </div>
       {% endif %}
+
       {% if selected_subtopic %}
-        <div class="mb-4">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
           <a class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" href="{{ url_for('topics', topic=selected_topic) }}">Show whole topic</a>
+          <button type="button" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" onclick="document.getElementById('edit-selected-subtopic').showModal()">Edit subtopic</button>
+          <dialog id="edit-selected-subtopic" class="w-full max-w-xl rounded-xl border border-slate-300 bg-white p-0 shadow-xl backdrop:bg-slate-900/35 dark:border-zinc-700 dark:bg-zinc-900 dark:backdrop:bg-black/60">
+            <div class="border-b border-slate-200 px-4 py-3 dark:border-zinc-700">
+              <h3 class="text-base font-semibold text-slate-900 dark:text-zinc-100">Edit subtopic</h3>
+            </div>
+            <form class="grid gap-2 p-4" method="post" action="{{ url_for('subtopic_rename') }}">
+              <input type="hidden" name="next" value="{{ current_path }}">
+              <input type="hidden" name="topic" value="{{ selected_topic }}">
+              <input type="hidden" name="subtopic" value="{{ selected_subtopic }}">
+              <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="selected-subtopic-new">New subtopic name</label>
+              <input id="selected-subtopic-new" name="new_subtopic" value="{{ selected_subtopic }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+              <div class="mt-2 flex items-center justify-end gap-2">
+                <button type="button" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" onclick="document.getElementById('edit-selected-subtopic').close()">Cancel</button>
+                <button type="submit" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600">Save subtopic</button>
+              </div>
+            </form>
+          </dialog>
+          <form method="post" action="{{ url_for('subtopic_delete') }}" onsubmit="return confirm('Delete this subtopic and all its questions? This also removes review history and feedback.');">
+            <input type="hidden" name="next" value="{{ current_path }}">
+            <input type="hidden" name="topic" value="{{ selected_topic }}">
+            <input type="hidden" name="subtopic" value="{{ selected_subtopic }}">
+            <button type="submit" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700">Delete subtopic</button>
+          </form>
         </div>
       {% endif %}
 
@@ -55,6 +113,31 @@
                 <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Subtopic: {{ q.subtopic }}</p>
               {% endif %}
               <p class="mt-2 text-xs text-slate-500 dark:text-zinc-400">Next review: {{ q.next_review_at|human_datetime }}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button type="button" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600" onclick="document.getElementById('edit-topic-question-{{ q.id }}').showModal()">Edit question</button>
+                <dialog id="edit-topic-question-{{ q.id }}" class="w-full max-w-xl rounded-xl border border-slate-300 bg-white p-0 shadow-xl backdrop:bg-slate-900/35 dark:border-zinc-700 dark:bg-zinc-900 dark:backdrop:bg-black/60">
+                  <div class="border-b border-slate-200 px-4 py-3 dark:border-zinc-700">
+                    <h3 class="text-base font-semibold text-slate-900 dark:text-zinc-100">Edit question #{{ q.id }}</h3>
+                  </div>
+                  <form class="grid gap-2 p-4" method="post" action="{{ url_for('question_update', question_id=q.id) }}">
+                    <input type="hidden" name="next" value="{{ current_path }}">
+                    <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-question-text-{{ q.id }}">Question</label>
+                    <textarea id="topic-question-text-{{ q.id }}" name="text" rows="3" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">{{ q.text }}</textarea>
+                    <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-question-topic-{{ q.id }}">Topic</label>
+                    <input id="topic-question-topic-{{ q.id }}" name="topic" value="{{ q.topic or '' }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                    <label class="text-xs font-semibold text-slate-600 dark:text-zinc-300" for="topic-question-subtopic-{{ q.id }}">Subtopic</label>
+                    <input id="topic-question-subtopic-{{ q.id }}" name="subtopic" value="{{ q.subtopic or '' }}" class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                    <div class="mt-2 flex items-center justify-end gap-2">
+                      <button type="button" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" onclick="document.getElementById('edit-topic-question-{{ q.id }}').close()">Cancel</button>
+                      <button type="submit" class="rounded-md border border-brand-500 bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600">Save question</button>
+                    </div>
+                  </form>
+                </dialog>
+                <form method="post" action="{{ url_for('question_delete', question_id=q.id) }}" onsubmit="return confirm('Delete this question? This also removes its review history and feedback.');">
+                  <input type="hidden" name="next" value="{{ current_path }}">
+                  <button type="submit" class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700">Delete question</button>
+                </form>
+              </div>
             </li>
           {% endfor %}
         </ul>

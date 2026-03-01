@@ -193,6 +193,12 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 list_questions_by_subtopic_fn=question_repository.list_questions_by_subtopic,
                 list_topics_with_stats_fn=question_repository.list_topics_with_stats,
                 list_subtopics_with_stats_fn=question_repository.list_subtopics_with_stats,
+                update_question_fn=question_repository.update_question,
+                delete_question_fn=question_repository.delete_question,
+                rename_topic_fn=question_repository.rename_topic,
+                delete_topic_fn=question_repository.delete_topic,
+                rename_subtopic_fn=question_repository.rename_subtopic,
+                delete_subtopic_fn=question_repository.delete_subtopic,
             ),
             options=PresentationOptions(
                 default_generation_language_code=DEFAULT_GENERATION_LANGUAGE_CODE,

@@ -63,6 +63,12 @@ class CatalogHandlerDeps:
     list_questions_by_subtopic_fn: Callable[..., Any]
     list_topics_with_stats_fn: Callable[..., Any]
     list_subtopics_with_stats_fn: Callable[..., Any]
+    update_question_fn: Callable[..., bool]
+    delete_question_fn: Callable[[int], bool]
+    rename_topic_fn: Callable[[str, str], int]
+    delete_topic_fn: Callable[[str], int]
+    rename_subtopic_fn: Callable[[str, str, str], int]
+    delete_subtopic_fn: Callable[[str, str], int]
 
 
 @dataclass(frozen=True)

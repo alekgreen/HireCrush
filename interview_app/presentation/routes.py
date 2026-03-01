@@ -111,6 +111,62 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
             render_template_fn=render_template,
         )
 
+    def question_update(question_id: int):
+        return catalog_handler.question_update_action(
+            deps=deps_provider().catalog,
+            question_id=question_id,
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+        )
+
+    def question_delete(question_id: int):
+        return catalog_handler.question_delete_action(
+            deps=deps_provider().catalog,
+            question_id=question_id,
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+        )
+
+    def topic_rename():
+        return catalog_handler.topic_rename_action(
+            deps=deps_provider().catalog,
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+        )
+
+    def topic_delete():
+        return catalog_handler.topic_delete_action(
+            deps=deps_provider().catalog,
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+        )
+
+    def subtopic_rename():
+        return catalog_handler.subtopic_rename_action(
+            deps=deps_provider().catalog,
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+        )
+
+    def subtopic_delete():
+        return catalog_handler.subtopic_delete_action(
+            deps=deps_provider().catalog,
+            request_obj=request,
+            flash_fn=flash,
+            redirect_fn=redirect,
+            url_for_fn=url_for,
+        )
+
     app.add_url_rule("/", endpoint="index", view_func=index, methods=["GET"])
     app.add_url_rule("/generate", endpoint="generate", view_func=generate, methods=["GET", "POST"])
     app.add_url_rule("/generate/start", endpoint="generate_start", view_func=generate_start, methods=["POST"])
@@ -159,3 +215,39 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
     )
     app.add_url_rule("/questions", endpoint="questions", view_func=questions, methods=["GET"])
     app.add_url_rule("/topics", endpoint="topics", view_func=topics, methods=["GET"])
+    app.add_url_rule(
+        "/questions/<int:question_id>/edit",
+        endpoint="question_update",
+        view_func=question_update,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/questions/<int:question_id>/delete",
+        endpoint="question_delete",
+        view_func=question_delete,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/topics/edit",
+        endpoint="topic_rename",
+        view_func=topic_rename,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/topics/delete",
+        endpoint="topic_delete",
+        view_func=topic_delete,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/subtopics/edit",
+        endpoint="subtopic_rename",
+        view_func=subtopic_rename,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/subtopics/delete",
+        endpoint="subtopic_delete",
+        view_func=subtopic_delete,
+        methods=["POST"],
+    )

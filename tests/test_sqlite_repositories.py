@@ -215,3 +215,72 @@ def test_feedback_repo_get_latest_feedback_returns_none_without_rows(client):
         latest = repo.get_latest_feedback(question_id=999999)
 
     assert latest is None
+
+
+def test_question_repo_update_rename_and_delete_subtopic_flow(client):
+    repo = SQLiteQuestionRepository()
+    question_id = insert_question(
+        "Explain Python descriptors in detail.",
+        topic="Python",
+        subtopic="Basics",
+    )
+
+    with flask_app.app_context():
+        updated = repo.update_question(
+            question_id,
+            text="Explain Python descriptors with an example.",
+            topic="Python",
+            subtopic="Advanced",
+        )
+        renamed = repo.rename_subtopic("python", "advanced", "Core")
+        remaining = list(repo.list_questions_by_subtopic("Python", "Core"))
+        deleted = repo.delete_subtopic("python", "core")
+        missing = repo.get_question_by_id(question_id)
+
+    assert updated is True
+    assert renamed == 1
+    assert len(remaining) == 1
+    assert str(remaining[0]["text"]) == "Explain Python descriptors with an example."
+    assert deleted == 1
+    assert missing is None
+
+
+def test_question_repo_delete_topic_cleans_review_rows(client):
+    question_repo = SQLiteQuestionRepository()
+    feedback_repo = SQLiteFeedbackRepository()
+    python_a = insert_question("What is the Python GIL?", topic="python")
+    python_b = insert_question("How does CPython memory allocation work?", topic="python")
+    insert_question("What is SQL normalization?", topic="sql")
+
+    with flask_app.app_context():
+        db = get_db()
+        feedback_repo.save_feedback(
+            python_a,
+            "It is a global lock.",
+            {
+                "score": 7,
+                "feedback": "Good start.",
+                "improved_answer": "The GIL is a mutex in CPython.",
+                "strengths": [],
+                "gaps": [],
+            },
+        )
+        db.execute(
+            """
+            INSERT INTO review_history (
+                question_id, rating, reviewed_at, old_interval_days, new_interval_days, old_ease_factor, new_ease_factor
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (python_b, 4, iso(now_utc()), 0, 1, 2.5, 2.6),
+        )
+        db.commit()
+
+        deleted = question_repo.delete_topic("PYTHON")
+        remaining_topics = [str(row["topic"]).lower() for row in question_repo.list_questions(limit=10)]
+        feedback_count = db.execute("SELECT COUNT(*) AS c FROM review_feedback").fetchone()["c"]
+        history_count = db.execute("SELECT COUNT(*) AS c FROM review_history").fetchone()["c"]
+
+    assert deleted == 2
+    assert remaining_topics == ["sql"]
+    assert feedback_count == 0
+    assert history_count == 0
