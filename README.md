@@ -11,6 +11,8 @@ Python Flask web app that:
 - Gemini-powered generation from a topic/role prompt.
 - Structured output JSON schema (`responseJsonSchema`) for predictable parsing.
 - Duplicate prevention using normalized content hash + DB unique constraint.
+- Model answer support for each interview question.
+- "Write your answer" workflow with Gemini scoring + actionable feedback.
 - Review queue for due cards with `Again / Hard / Good / Easy`.
 - SM-2-like scheduling fields (`repetitions`, `interval_days`, `ease_factor`, `next_review_at`).
 - SQLite persistence.
@@ -36,6 +38,7 @@ cp .env.example .env
 ```bash
 GEMINI_API_KEY=your_real_key
 GEMINI_MODEL=gemini-2.5-flash
+AUTO_GENERATE_ANSWERS=true
 ```
 
 4. Run app:
@@ -67,3 +70,4 @@ Integration tests require a valid `GEMINI_API_KEY`.
 - Other grades schedule by interval in days.
 - Change `GEMINI_MODEL` in `.env` if you want a different model.
 - Optional: set `GEMINI_FALLBACK_MODELS` (comma-separated) for additional automatic model fallback.
+- Set `AUTO_GENERATE_ANSWERS=false` if you prefer generating model answers on-demand in review.

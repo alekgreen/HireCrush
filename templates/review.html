@@ -9,6 +9,54 @@
       <p class="question-text">{{ question.text }}</p>
       <p class="meta">Topic: {{ question.topic or "General" }}</p>
     </article>
+
+    <section class="answer-section">
+      {% if question.suggested_answer %}
+        <details>
+          <summary>Reveal model answer</summary>
+          <p class="answer-text">{{ question.suggested_answer }}</p>
+        </details>
+      {% else %}
+        <form method="post" action="{{ url_for('review_answer', question_id=question.id) }}">
+          <button class="btn" type="submit">Generate Model Answer</button>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="card feedback-form">
+      <h3>Your Answer</h3>
+      <form method="post" action="{{ url_for('review_feedback', question_id=question.id) }}" class="form">
+        <label for="user_answer">Write your answer</label>
+        <textarea id="user_answer" name="user_answer" rows="7" placeholder="Type your answer here..." required></textarea>
+        <button class="btn primary" type="submit">Get Gemini Feedback</button>
+      </form>
+    </section>
+
+    {% if latest_feedback %}
+      <section class="card feedback-result">
+        <h3>Latest Feedback</h3>
+        <p><strong>Score:</strong> {{ latest_feedback.score }}/10</p>
+        <p><strong>Feedback:</strong> {{ latest_feedback.feedback }}</p>
+        {% if latest_feedback.strengths %}
+          <p><strong>Strengths</strong></p>
+          <ul>
+            {% for item in latest_feedback.strengths %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if latest_feedback.gaps %}
+          <p><strong>Gaps</strong></p>
+          <ul>
+            {% for item in latest_feedback.gaps %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        <p><strong>Improved answer:</strong> {{ latest_feedback.improved_answer }}</p>
+      </section>
+    {% endif %}
+
     <form method="post" action="{{ url_for('review_submit', question_id=question.id) }}" class="review-actions">
       <button class="btn danger" type="submit" name="grade" value="again">Again</button>
       <button class="btn" type="submit" name="grade" value="hard">Hard</button>

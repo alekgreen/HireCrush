@@ -81,12 +81,18 @@ body {
 }
 
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+textarea {
   width: 100%;
   padding: 0.65rem;
   border: 1px solid #bccde2;
   border-radius: 8px;
   font-size: 0.95rem;
+}
+
+textarea {
+  resize: vertical;
+  font-family: inherit;
 }
 
 .actions,
@@ -128,6 +134,20 @@ input[type="number"] {
 .question-text {
   font-size: 1.03rem;
   line-height: 1.45;
+}
+
+.answer-section {
+  margin: 0.8rem 0;
+}
+
+.answer-text {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.feedback-form h3,
+.feedback-result h3 {
+  margin-top: 0;
 }
 
 .meta {

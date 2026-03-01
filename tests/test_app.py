@@ -13,11 +13,13 @@ def client(tmp_path):
         TESTING=True,
         DATABASE=str(db_path),
         GEMINI_API_KEY="test-key",
+        AUTO_GENERATE_ANSWERS=False,
     )
 
     with app_module.app.app_context():
         app_module.init_db()
         db = app_module.get_db()
+        db.execute("DELETE FROM review_feedback")
         db.execute("DELETE FROM review_history")
         db.execute("DELETE FROM questions")
         db.commit()
@@ -26,7 +28,7 @@ def client(tmp_path):
         yield test_client
 
 
-def insert_question(text="What is polymorphism in OOP?", topic="python"):
+def insert_question(text="What is polymorphism in OOP?", topic="python", suggested_answer=None):
     with app_module.app.app_context():
         db = app_module.get_db()
         now = app_module.now_utc()
@@ -34,8 +36,8 @@ def insert_question(text="What is polymorphism in OOP?", topic="python"):
             """
             INSERT INTO questions (
                 text, text_hash, topic, created_at, next_review_at,
-                repetitions, interval_days, ease_factor
-            ) VALUES (?, ?, ?, ?, ?, 0, 0, 2.5)
+                suggested_answer, repetitions, interval_days, ease_factor
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 2.5)
             """,
             (
                 text,
@@ -43,6 +45,7 @@ def insert_question(text="What is polymorphism in OOP?", topic="python"):
                 topic,
                 app_module.iso(now),
                 app_module.iso(now),
+                suggested_answer,
             ),
         )
         db.commit()
@@ -220,3 +223,58 @@ def test_generate_route_masks_key_in_http_error(monkeypatch, client):
     assert res.status_code == 200
     assert "Gemini model was not found." in body
     assert "SUPERSECRET" not in body
+
+
+def test_review_answer_route_generates_model_answer(monkeypatch, client):
+    question_id = insert_question("Explain eventual consistency.")
+
+    monkeypatch.setattr(
+        app_module,
+        "call_gemini_for_answer",
+        lambda _question, _topic=None: "Eventual consistency means replicas converge over time.",
+    )
+    res = client.post(f"/review/{question_id}/answer", follow_redirects=True)
+    assert res.status_code == 200
+
+    with app_module.app.app_context():
+        row = app_module.get_db().execute(
+            "SELECT suggested_answer FROM questions WHERE id = ?",
+            (question_id,),
+        ).fetchone()
+
+    assert "replicas converge over time" in row["suggested_answer"]
+
+
+def test_review_feedback_route_stores_feedback(monkeypatch, client):
+    question_id = insert_question(
+        "What is a database transaction?",
+        suggested_answer="A transaction is an ACID unit of work.",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "call_gemini_for_feedback",
+        lambda **_kwargs: {
+            "score": 7,
+            "feedback": "Good start, add isolation and rollback details.",
+            "improved_answer": "A transaction groups operations atomically with ACID guarantees.",
+            "strengths": ["Mentioned ACID"],
+            "gaps": ["No practical example"],
+        },
+    )
+
+    res = client.post(
+        f"/review/{question_id}/feedback",
+        data={"user_answer": "A transaction is one logical unit of work in a DB."},
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+
+    with app_module.app.app_context():
+        row = app_module.get_db().execute(
+            "SELECT score, feedback, improved_answer FROM review_feedback WHERE question_id = ?",
+            (question_id,),
+        ).fetchone()
+
+    assert row["score"] == 7
+    assert "Good start" in row["feedback"]
+    assert "ACID guarantees" in row["improved_answer"]

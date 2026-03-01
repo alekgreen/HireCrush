@@ -9,6 +9,7 @@
           <th>ID</th>
           <th>Question</th>
           <th>Topic</th>
+          <th>Has Answer</th>
           <th>Next Review</th>
           <th>Interval (days)</th>
           <th>Repetitions</th>
@@ -20,6 +21,7 @@
             <td>{{ q.id }}</td>
             <td>{{ q.text }}</td>
             <td>{{ q.topic or "General" }}</td>
+            <td>{{ "Yes" if q.suggested_answer else "No" }}</td>
             <td>{{ q.next_review_at }}</td>
             <td>{{ q.interval_days }}</td>
             <td>{{ q.repetitions }}</td>

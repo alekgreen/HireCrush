@@ -62,6 +62,7 @@ def test_generate_route_live_api_persists_questions(tmp_path):
     old_database = app_module.app.config["DATABASE"]
     old_key = app_module.app.config["GEMINI_API_KEY"]
     old_model = app_module.app.config["GEMINI_MODEL"]
+    old_auto = app_module.app.config.get("AUTO_GENERATE_ANSWERS", True)
 
     db_path = tmp_path / "integration.db"
     app_module.app.config.update(
@@ -69,6 +70,7 @@ def test_generate_route_live_api_persists_questions(tmp_path):
         DATABASE=str(db_path),
         GEMINI_API_KEY=api_key,
         GEMINI_MODEL=model,
+        AUTO_GENERATE_ANSWERS=False,
     )
 
     try:
@@ -92,3 +94,22 @@ def test_generate_route_live_api_persists_questions(tmp_path):
         app_module.app.config["DATABASE"] = old_database
         app_module.app.config["GEMINI_API_KEY"] = old_key
         app_module.app.config["GEMINI_MODEL"] = old_model
+        app_module.app.config["AUTO_GENERATE_ANSWERS"] = old_auto
+
+
+@pytest.mark.integration
+def test_call_gemini_for_feedback_live_api():
+    api_key = _gemini_api_key()
+    model, _ = _select_working_model(api_key)
+    app_module.app.config["GEMINI_API_KEY"] = api_key
+    app_module.app.config["GEMINI_MODEL"] = model
+
+    feedback = app_module.call_gemini_for_feedback(
+        question="How do you optimize SQL queries?",
+        reference_answer="Start with execution plans, index strategy, and query shape improvements.",
+        user_answer="I usually add indexes and avoid selecting extra columns.",
+    )
+
+    assert 1 <= feedback["score"] <= 10
+    assert isinstance(feedback["feedback"], str) and feedback["feedback"].strip()
+    assert isinstance(feedback["improved_answer"], str) and feedback["improved_answer"].strip()
