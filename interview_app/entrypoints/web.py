@@ -1,4 +1,5 @@
 import os
+from inspect import Parameter, signature
 from typing import Any
 
 import click
@@ -36,6 +37,7 @@ from interview_app.constants import (
     TOPIC_TAG_COLOR_BY_CODE,
 )
 from interview_app.db import (
+    close_db,
     get_db,
     list_applied_migrations,
     list_known_migrations,
@@ -70,14 +72,45 @@ from interview_app.utils import (
 )
 
 
+def _supports_get_db_kwarg(factory: Any) -> bool:
+    try:
+        params = signature(factory).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        p.kind == Parameter.VAR_KEYWORD or p.name == "get_db_fn"
+        for p in params
+    )
+
+
+def _build_repository(factory: Any, *, get_db_fn):
+    if _supports_get_db_kwarg(factory):
+        return factory(get_db_fn=get_db_fn)
+    return factory()
+
+
 def create_app(config_override: dict[str, Any] | None = None, import_name: str = "app"):
-    app = create_flask_app(import_name)
+    close_db_fn = close_db
+    if config_override and "CLOSE_DB_FN" in config_override:
+        close_db_fn = config_override["CLOSE_DB_FN"]
+
+    app = create_flask_app(import_name, close_db_fn=close_db_fn)
     if config_override:
         app.config.update(config_override)
 
-    question_repository = SQLiteQuestionRepository()
-    feedback_repository = SQLiteFeedbackRepository()
-    settings_repository = SQLiteSettingsRepository()
+    get_db_fn = app.config.get("GET_DB_FN", get_db)
+    run_migrations_fn = app.config.get("RUN_MIGRATIONS_FN", run_migrations)
+    list_known_migrations_fn = app.config.get("LIST_KNOWN_MIGRATIONS_FN", list_known_migrations)
+    list_applied_migrations_fn = app.config.get("LIST_APPLIED_MIGRATIONS_FN", list_applied_migrations)
+    list_pending_migrations_fn = app.config.get("LIST_PENDING_MIGRATIONS_FN", list_pending_migrations)
+
+    question_repository_factory = app.config.get("QUESTION_REPOSITORY_FACTORY", SQLiteQuestionRepository)
+    feedback_repository_factory = app.config.get("FEEDBACK_REPOSITORY_FACTORY", SQLiteFeedbackRepository)
+    settings_repository_factory = app.config.get("SETTINGS_REPOSITORY_FACTORY", SQLiteSettingsRepository)
+
+    question_repository = _build_repository(question_repository_factory, get_db_fn=get_db_fn)
+    feedback_repository = _build_repository(feedback_repository_factory, get_db_fn=get_db_fn)
+    settings_repository = _build_repository(settings_repository_factory, get_db_fn=get_db_fn)
 
     explicit_model_override = bool(config_override and "GEMINI_MODEL" in config_override)
     explicit_api_key_override = bool(config_override and "GEMINI_API_KEY" in config_override)
@@ -103,7 +136,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
         infra=RuntimeInfraDeps(
             os_getenv=os.getenv,
             requests_module=requests,
-            get_db_fn=get_db,
+            get_db_fn=get_db_fn,
         ),
         modules=RuntimeServiceModules(
             gemini_service_module=gemini_service,
@@ -244,7 +277,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     @app.cli.command("db-upgrade")
     def db_upgrade_command() -> None:
         with app.app_context():
-            applied = run_migrations()
+            applied = run_migrations_fn()
         if not applied:
             click.echo("Database is up to date.")
             return
@@ -255,9 +288,9 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     @app.cli.command("db-status")
     def db_status_command() -> None:
         with app.app_context():
-            known = list_known_migrations()
-            applied = list_applied_migrations()
-            pending = list_pending_migrations()
+            known = list_known_migrations_fn()
+            applied = list_applied_migrations_fn()
+            pending = list_pending_migrations_fn()
         click.echo(f"Known migrations: {len(known)}")
         click.echo(f"Applied migrations: {len(applied)}")
         click.echo(f"Pending migrations: {len(pending)}")
@@ -269,7 +302,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     @app.cli.command("db-history")
     def db_history_command() -> None:
         with app.app_context():
-            applied = list_applied_migrations()
+            applied = list_applied_migrations_fn()
         if not applied:
             click.echo("No migrations have been applied.")
             return

@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 from flask import Flask
@@ -15,7 +16,7 @@ from interview_app.utils import format_datetime
 load_dotenv()
 
 
-def create_flask_app(import_name: str) -> Flask:
+def create_flask_app(import_name: str, *, close_db_fn: Callable[..., None] = close_db) -> Flask:
     app = Flask(import_name)
     app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
     app.config["DATABASE"] = os.getenv("DATABASE_PATH", "interview.db")
@@ -25,7 +26,7 @@ def create_flask_app(import_name: str) -> Flask:
     app.config["AUTO_GENERATE_ANSWERS"] = (
         os.getenv("AUTO_GENERATE_ANSWERS", "true").strip().lower() in {"1", "true", "yes", "on"}
     )
-    app.teardown_appcontext(close_db)
+    app.teardown_appcontext(close_db_fn)
 
     @app.template_filter("human_datetime")
     def human_datetime_filter(value) -> str:
