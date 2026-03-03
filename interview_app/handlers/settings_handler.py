@@ -23,6 +23,8 @@ def settings_page(
 
     selectable_models = list(app_obj.config.get("GEMINI_SELECTABLE_MODELS", []))
     current_model = str(resolve_gemini_model_fn() or app_obj.config.get("GEMINI_MODEL", "")).strip()
+    store_mode = str(gemini_api_key_store_mode_fn() or "").strip().lower()
+    is_database_mode = store_mode.startswith("database")
 
     if request_obj.method == "POST":
         selected_model = str(request_obj.form.get("gemini_model", "")).strip()
@@ -37,21 +39,25 @@ def settings_page(
             return redirect_fn(url_for_fn("settings"))
 
         persist_gemini_model_fn(selected_model)
-        app_obj.config["GEMINI_MODEL"] = selected_model
+        if not is_database_mode:
+            app_obj.config["GEMINI_MODEL"] = selected_model
         flash_fn(f"Saved Gemini model: {selected_model}", "success")
 
         if api_key:
-            # Always enable the provided key for the current process, even if secure persistence fails.
-            app_obj.config["GEMINI_API_KEY"] = api_key
+            if not is_database_mode:
+                # For local keyring mode, keep runtime behavior compatible with legacy flow.
+                app_obj.config["GEMINI_API_KEY"] = api_key
             ok, error = persist_gemini_api_key_fn(api_key)
             if not ok:
-                flash_fn(
-                    (error or "Could not save Gemini API key.")
-                    + " The key is active for this running app only.",
-                    "error",
-                )
+                if is_database_mode:
+                    flash_fn(error or "Could not save Gemini API key.", "error")
+                else:
+                    flash_fn(
+                        (error or "Could not save Gemini API key.")
+                        + " The key is active for this running app only.",
+                        "error",
+                    )
             else:
-                store_mode = str(gemini_api_key_store_mode_fn() or "").strip().lower()
                 if store_mode.startswith("database"):
                     flash_fn("Gemini API key saved in database storage.", "success")
                 elif gemini_api_key_store_uses_alt_fallback_fn():
@@ -66,8 +72,8 @@ def settings_page(
             if not ok:
                 flash_fn(error or "Could not clear Gemini API key.", "error")
             else:
-                app_obj.config["GEMINI_API_KEY"] = ""
-                store_mode = str(gemini_api_key_store_mode_fn() or "").strip().lower()
+                if not is_database_mode:
+                    app_obj.config["GEMINI_API_KEY"] = ""
                 if store_mode.startswith("database"):
                     flash_fn("Gemini API key removed from database storage.", "success")
                 elif gemini_api_key_store_uses_alt_fallback_fn():
@@ -80,7 +86,7 @@ def settings_page(
     stored_api_key = resolve_gemini_api_key_fn()
     has_stored_api_key = bool(stored_api_key)
     has_runtime_api_key = bool(str(app_obj.config.get("GEMINI_API_KEY", "")).strip())
-    keyring_backend_mode = str(gemini_api_key_store_mode_fn() or "").strip().lower()
+    keyring_backend_mode = store_mode
     current_key_source = "none"
     if has_stored_api_key:
         if keyring_backend_mode.startswith("database"):
