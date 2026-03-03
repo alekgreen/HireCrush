@@ -168,3 +168,29 @@ def test_settings_route_saves_api_key_in_keyrings_alt_fallback(client, monkeypat
     assert response.status_code == 200
     assert "keyrings.alt local fallback storage" in body
     assert flask_app.config["GEMINI_API_KEY"] == "fallback-token"
+
+
+def test_settings_route_database_mode_does_not_set_process_global_api_key(client, monkeypatch):
+    original_key = flask_app.config["GEMINI_API_KEY"]
+
+    _set_store_hooks(
+        monkeypatch,
+        resolve_api_key=lambda: None,
+        persist_api_key=lambda _value: (False, "Encrypted storage unavailable."),
+        store_mode=lambda: "database_encrypted",
+        store_available=lambda: False,
+    )
+
+    response = client.post(
+        "/settings",
+        data={
+            "gemini_model": "gemini-2.5-flash",
+            "gemini_api_key": "tenant-secret-key",
+        },
+        follow_redirects=True,
+    )
+    body = response.data.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Encrypted storage unavailable." in body
+    assert flask_app.config["GEMINI_API_KEY"] == original_key
