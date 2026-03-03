@@ -13,19 +13,38 @@ ALL_MODELS = [
 ]
 
 
+def _set_store_hooks(
+    monkeypatch,
+    *,
+    resolve_api_key=lambda: None,
+    persist_api_key=lambda _value: (True, None),
+    clear_api_key=lambda: (True, None),
+    store_available=lambda: True,
+    store_mode=lambda: "secure",
+    uses_alt_fallback=lambda: False,
+):
+    monkeypatch.setitem(flask_app.extensions, "resolve_gemini_api_key_fn", resolve_api_key)
+    monkeypatch.setitem(flask_app.extensions, "persist_gemini_api_key_fn", persist_api_key)
+    monkeypatch.setitem(flask_app.extensions, "clear_gemini_api_key_fn", clear_api_key)
+    monkeypatch.setitem(
+        flask_app.extensions,
+        "gemini_api_key_store_available_fn",
+        store_available,
+    )
+    monkeypatch.setitem(
+        flask_app.extensions,
+        "gemini_api_key_store_mode_fn",
+        store_mode,
+    )
+    monkeypatch.setitem(
+        flask_app.extensions,
+        "gemini_api_key_store_uses_alt_fallback_fn",
+        uses_alt_fallback,
+    )
+
+
 def test_settings_route_renders_model_options(client, monkeypatch):
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.keyring_available",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.backend_mode",
-        lambda: "secure",
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.get_gemini_api_key",
-        lambda: None,
-    )
+    _set_store_hooks(monkeypatch, resolve_api_key=lambda: None)
 
     response = client.get("/settings")
     body = response.data.decode("utf-8")
@@ -37,18 +56,7 @@ def test_settings_route_renders_model_options(client, monkeypatch):
 
 
 def test_settings_route_saves_selected_model(client, monkeypatch):
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.keyring_available",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.backend_mode",
-        lambda: "secure",
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.get_gemini_api_key",
-        lambda: None,
-    )
+    _set_store_hooks(monkeypatch, resolve_api_key=lambda: None)
 
     response = client.post(
         "/settings",
@@ -70,18 +78,7 @@ def test_settings_route_saves_selected_model(client, monkeypatch):
 
 
 def test_settings_route_rejects_invalid_model(client, monkeypatch):
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.keyring_available",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.backend_mode",
-        lambda: "secure",
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.get_gemini_api_key",
-        lambda: None,
-    )
+    _set_store_hooks(monkeypatch, resolve_api_key=lambda: None)
 
     response = client.post(
         "/settings",
@@ -97,26 +94,16 @@ def test_settings_route_rejects_invalid_model(client, monkeypatch):
 def test_settings_route_saves_api_key_in_secure_store(client, monkeypatch):
     captured = {}
 
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.keyring_available",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.get_gemini_api_key",
-        lambda: "stored-token",
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.using_keyrings_alt_fallback",
-        lambda: False,
-    )
-
     def fake_set_gemini_api_key(value):
         captured["token"] = value
         return True, None
 
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.set_gemini_api_key",
-        fake_set_gemini_api_key,
+    _set_store_hooks(
+        monkeypatch,
+        resolve_api_key=lambda: "stored-token",
+        persist_api_key=fake_set_gemini_api_key,
+        uses_alt_fallback=lambda: False,
+        store_mode=lambda: "secure",
     )
 
     response = client.post(
@@ -136,21 +123,12 @@ def test_settings_route_saves_api_key_in_secure_store(client, monkeypatch):
 
 
 def test_settings_route_keeps_api_key_in_runtime_when_secure_store_fails(client, monkeypatch):
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.keyring_available",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.get_gemini_api_key",
-        lambda: None,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.using_keyrings_alt_fallback",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.set_gemini_api_key",
-        lambda _value: (False, "Secure token storage is unavailable."),
+    _set_store_hooks(
+        monkeypatch,
+        resolve_api_key=lambda: None,
+        persist_api_key=lambda _value: (False, "Secure token storage is unavailable."),
+        uses_alt_fallback=lambda: False,
+        store_available=lambda: False,
     )
 
     response = client.post(
@@ -169,25 +147,12 @@ def test_settings_route_keeps_api_key_in_runtime_when_secure_store_fails(client,
 
 
 def test_settings_route_saves_api_key_in_keyrings_alt_fallback(client, monkeypatch):
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.keyring_available",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.backend_mode",
-        lambda: "keyrings_alt",
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.get_gemini_api_key",
-        lambda: "stored-token",
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.using_keyrings_alt_fallback",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "interview_app.handlers.settings_handler.secure_token_store.set_gemini_api_key",
-        lambda _value: (True, None),
+    _set_store_hooks(
+        monkeypatch,
+        resolve_api_key=lambda: "stored-token",
+        persist_api_key=lambda _value: (True, None),
+        uses_alt_fallback=lambda: True,
+        store_mode=lambda: "keyrings_alt",
     )
 
     response = client.post(

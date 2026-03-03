@@ -30,6 +30,13 @@ class SQLiteSettingsRepository:
         )
         db.commit()
 
+    def _uses_user_scope(self) -> bool:
+        self._ensure_table()
+        db = self._get_db()
+        rows = db.execute("PRAGMA table_info(app_settings)").fetchall()
+        column_names = {str(row["name"]).strip().lower() for row in rows if "name" in row.keys()}
+        return "user_id" in column_names
+
     def get_value(self, key: str) -> str | None:
         self._ensure_table()
         db = self._get_db()
@@ -48,16 +55,28 @@ class SQLiteSettingsRepository:
         return value or None
 
     def set_value(self, key: str, value: str) -> None:
-        self._ensure_table()
+        uses_user_scope = self._uses_user_scope()
         db = self._get_db()
-        db.execute(
-            """
-            INSERT INTO app_settings(key, value, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(key) DO UPDATE SET
-                value = excluded.value,
-                updated_at = excluded.updated_at
-            """,
-            (key, value, self._iso(self._now_utc())),
-        )
+        if uses_user_scope:
+            db.execute(
+                """
+                INSERT INTO app_settings(key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (key, value, self._iso(self._now_utc())),
+            )
+        else:
+            db.execute(
+                """
+                INSERT INTO app_settings(key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (key, value, self._iso(self._now_utc())),
+            )
         db.commit()

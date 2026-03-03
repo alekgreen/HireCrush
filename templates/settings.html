@@ -17,6 +17,8 @@
       <p class="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-400">Gemini key source</p>
       {% if current_key_source == "secure_local_storage" %}
         <p class="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Secure local storage</p>
+      {% elif current_key_source == "database" %}
+        <p class="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Database storage</p>
       {% elif current_key_source == "keyrings_alt_fallback" %}
         <p class="mt-1 text-sm font-semibold text-amber-700 dark:text-amber-300">keyrings.alt fallback storage</p>
       {% elif current_key_source == "environment" %}
@@ -25,7 +27,13 @@
         <p class="mt-1 text-sm font-semibold text-slate-800 dark:text-zinc-100">No API key configured</p>
       {% endif %}
       {% if not keyring_available %}
-        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Install a recommended keyring backend or `keyrings.alt` for local fallback storage.</p>
+        {% if keyring_backend_mode and keyring_backend_mode.startswith("database") %}
+          <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Set `CORE_GEMINI_KEY_ENCRYPTION_KEY` to enable encrypted database storage.</p>
+        {% else %}
+          <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Install a recommended keyring backend or `keyrings.alt` for local fallback storage.</p>
+        {% endif %}
+      {% elif keyring_backend_mode and keyring_backend_mode.startswith("database") %}
+        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Using database-backed per-user storage.</p>
       {% elif keyring_backend_mode == "keyrings_alt" %}
         <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">Using keyrings.alt fallback (not OS-secure keychain storage).</p>
       {% elif has_stored_api_key %}
@@ -55,7 +63,11 @@
         >Get API key</a>
       </div>
       <input autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100" id="gemini-api-key" name="gemini_api_key" placeholder="Leave blank to keep current key" type="password">
-      <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Uses OS keychain when available, otherwise keyrings.alt fallback if installed.</p>
+      {% if keyring_backend_mode and keyring_backend_mode.startswith("database") %}
+        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Stored per user in application database.</p>
+      {% else %}
+        <p class="mt-1 text-xs text-slate-500 dark:text-zinc-400">Uses OS keychain when available, otherwise keyrings.alt fallback if installed.</p>
+      {% endif %}
     </div>
 
     <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-zinc-200" for="clear-gemini-api-key">
