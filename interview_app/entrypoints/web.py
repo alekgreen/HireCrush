@@ -89,6 +89,11 @@ def _build_repository(factory: Any, *, get_db_fn):
     return factory()
 
 
+def _normalized_or_none(value: object) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized or None
+
+
 def create_app(config_override: dict[str, Any] | None = None, import_name: str = "app"):
     close_db_fn = close_db
     if config_override and "CLOSE_DB_FN" in config_override:
@@ -112,15 +117,57 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     feedback_repository = _build_repository(feedback_repository_factory, get_db_fn=get_db_fn)
     settings_repository = _build_repository(settings_repository_factory, get_db_fn=get_db_fn)
 
+    resolve_gemini_model_fn = app.config.get("RESOLVE_GEMINI_MODEL_FN")
+    if not callable(resolve_gemini_model_fn):
+        def resolve_gemini_model_fn() -> str | None:
+            stored = settings_repository.get_value("gemini_model")
+            if stored:
+                return stored
+            return _normalized_or_none(app.config.get("GEMINI_MODEL", ""))
+
+    persist_gemini_model_fn = app.config.get("PERSIST_GEMINI_MODEL_FN")
+    if not callable(persist_gemini_model_fn):
+        def persist_gemini_model_fn(model: str) -> None:
+            settings_repository.set_value("gemini_model", model)
+
+    resolve_gemini_api_key_fn = app.config.get("RESOLVE_GEMINI_API_KEY_FN")
+    if not callable(resolve_gemini_api_key_fn):
+        def resolve_gemini_api_key_fn() -> str | None:
+            stored = secure_token_store.get_gemini_api_key()
+            if stored:
+                return stored
+            return _normalized_or_none(app.config.get("GEMINI_API_KEY", ""))
+
+    persist_gemini_api_key_fn = app.config.get("PERSIST_GEMINI_API_KEY_FN")
+    if not callable(persist_gemini_api_key_fn):
+        persist_gemini_api_key_fn = secure_token_store.set_gemini_api_key
+
+    clear_gemini_api_key_fn = app.config.get("CLEAR_GEMINI_API_KEY_FN")
+    if not callable(clear_gemini_api_key_fn):
+        clear_gemini_api_key_fn = secure_token_store.clear_gemini_api_key
+
+    gemini_api_key_store_available_fn = app.config.get("GEMINI_API_KEY_STORE_AVAILABLE_FN")
+    if not callable(gemini_api_key_store_available_fn):
+        gemini_api_key_store_available_fn = secure_token_store.keyring_available
+
+    gemini_api_key_store_mode_fn = app.config.get("GEMINI_API_KEY_STORE_MODE_FN")
+    if not callable(gemini_api_key_store_mode_fn):
+        gemini_api_key_store_mode_fn = secure_token_store.backend_mode
+
+    gemini_api_key_store_uses_alt_fallback_fn = app.config.get("GEMINI_API_KEY_STORE_USES_ALT_FALLBACK_FN")
+    if not callable(gemini_api_key_store_uses_alt_fallback_fn):
+        gemini_api_key_store_uses_alt_fallback_fn = secure_token_store.using_keyrings_alt_fallback
+
     explicit_model_override = bool(config_override and "GEMINI_MODEL" in config_override)
     explicit_api_key_override = bool(config_override and "GEMINI_API_KEY" in config_override)
     if not explicit_model_override:
         with app.app_context():
-            persisted_model = settings_repository.get_value("gemini_model")
+            persisted_model = resolve_gemini_model_fn()
         if persisted_model:
             app.config["GEMINI_MODEL"] = persisted_model
     if not explicit_api_key_override:
-        persisted_api_key = secure_token_store.get_gemini_api_key()
+        with app.app_context():
+            persisted_api_key = resolve_gemini_api_key_fn()
         if persisted_api_key:
             app.config["GEMINI_API_KEY"] = persisted_api_key
 
@@ -272,6 +319,14 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
     app.extensions["runtime"] = runtime
     app.extensions["build_handler_deps"] = build_handler_deps
     app.extensions["settings_repository"] = settings_repository
+    app.extensions["resolve_gemini_model_fn"] = resolve_gemini_model_fn
+    app.extensions["persist_gemini_model_fn"] = persist_gemini_model_fn
+    app.extensions["resolve_gemini_api_key_fn"] = resolve_gemini_api_key_fn
+    app.extensions["persist_gemini_api_key_fn"] = persist_gemini_api_key_fn
+    app.extensions["clear_gemini_api_key_fn"] = clear_gemini_api_key_fn
+    app.extensions["gemini_api_key_store_available_fn"] = gemini_api_key_store_available_fn
+    app.extensions["gemini_api_key_store_mode_fn"] = gemini_api_key_store_mode_fn
+    app.extensions["gemini_api_key_store_uses_alt_fallback_fn"] = gemini_api_key_store_uses_alt_fallback_fn
     register_routes(app, build_handler_deps)
 
     @app.cli.command("db-upgrade")

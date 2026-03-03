@@ -106,9 +106,31 @@ class RuntimeFacade:
         self._max_inline_audio_bytes = deps.config.max_inline_audio_bytes
         self._runtime_callables = runtime_callables
 
+    def _resolved_gemini_model(self) -> str:
+        resolver = self._app.extensions.get("resolve_gemini_model_fn")
+        if callable(resolver):
+            try:
+                resolved = str(resolver() or "").strip()
+                if resolved:
+                    return resolved
+            except RuntimeError:
+                pass
+        return str(self._app.config.get("GEMINI_MODEL", "")).strip()
+
+    def _resolved_gemini_api_key(self) -> str:
+        resolver = self._app.extensions.get("resolve_gemini_api_key_fn")
+        if callable(resolver):
+            try:
+                resolved = str(resolver() or "").strip()
+                if resolved:
+                    return resolved
+            except RuntimeError:
+                pass
+        return str(self._app.config.get("GEMINI_API_KEY", "")).strip()
+
     def gemini_model_candidates(self) -> list[str]:
         return self._gemini_service.build_model_candidates(
-            configured_model=str(self._app.config.get("GEMINI_MODEL", "")),
+            configured_model=self._resolved_gemini_model(),
             env_fallback_models=self._os_getenv("GEMINI_FALLBACK_MODELS", "") or "",
             default_models=self._gemini_model_fallbacks,
         )
@@ -118,7 +140,7 @@ class RuntimeFacade:
             prompt=prompt,
             response_schema=response_schema,
             temperature=temperature,
-            api_key=self._app.config["GEMINI_API_KEY"],
+            api_key=self._resolved_gemini_api_key(),
             model_candidates=self.gemini_model_candidates(),
             parse_json_from_text_fn=self._parse_json_from_text_fn,
             http_client=self._requests,
@@ -133,7 +155,7 @@ class RuntimeFacade:
         transcript, model = self._gemini_service.transcribe_audio(
             audio_bytes=audio_bytes,
             mime_type=mime_type,
-            api_key=self._app.config["GEMINI_API_KEY"],
+            api_key=self._resolved_gemini_api_key(),
             model_candidates=self.gemini_model_candidates(),
             http_client=self._requests,
             normalize_audio_mime_type_fn=self._runtime_callables.get_normalize_audio_mime_type(),

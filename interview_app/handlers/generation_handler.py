@@ -364,18 +364,27 @@ def _run_generation_job(
     deps: GenerationHandlerDeps,
     payload: dict,
     job_id: str,
+    request_headers: dict[str, str] | None = None,
 ) -> None:
     def progress_callback(inserted: int, requested_count: int) -> None:
         _set_generation_job_progress(job_id, inserted, requested_count)
 
     _set_generation_job_status(job_id, "running")
     try:
-        with app_obj.app_context():
-            inserted, remaining = _execute_generation(
-                deps=deps,
-                payload=payload,
-                progress_callback=progress_callback,
-            )
+        if request_headers:
+            with app_obj.test_request_context("/", headers=request_headers):
+                inserted, remaining = _execute_generation(
+                    deps=deps,
+                    payload=payload,
+                    progress_callback=progress_callback,
+                )
+        else:
+            with app_obj.app_context():
+                inserted, remaining = _execute_generation(
+                    deps=deps,
+                    payload=payload,
+                    progress_callback=progress_callback,
+                )
         _set_generation_job_progress(job_id, inserted, payload["count"])
         _set_generation_job_status(
             job_id,
@@ -412,6 +421,11 @@ def generate_start(
         requested_count=payload["count"],
         question_type=payload["question_type"],
     )
+    request_headers: dict[str, str] = {}
+    user_id_header = str(request_obj.headers.get("X-User-Id", "")).strip()
+    if user_id_header:
+        request_headers["X-User-Id"] = user_id_header
+
     worker = threading.Thread(
         target=_run_generation_job,
         kwargs={
@@ -419,6 +433,7 @@ def generate_start(
             "deps": deps,
             "payload": payload,
             "job_id": job_id,
+            "request_headers": request_headers or None,
         },
         daemon=True,
     )
