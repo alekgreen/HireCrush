@@ -193,6 +193,45 @@ class RuntimeFacade:
             answer_json_schema=self._answer_json_schema,
         )
 
+    def stream_answer_for_question(self, question_id: int):
+        db = self._get_db_fn()
+        question = self._question_repository.get_question_by_id(question_id)
+        if question is None:
+            raise RuntimeError("Question not found.")
+
+        existing = (question["suggested_answer"] or "").strip()
+        if existing:
+            yield existing
+            return
+
+        question_text, question_topic = self._question_service.build_answer_generation_input(question)
+        prompt = self._generation_service.build_answer_prompt(question=question_text, topic=question_topic)
+        stream, model = self._gemini_service.stream_text(
+            prompt=prompt,
+            temperature=0.6,
+            api_key=self._resolved_gemini_api_key(),
+            model_candidates=self.gemini_model_candidates(),
+            http_client=self._requests,
+        )
+
+        chunks: list[str] = []
+        for piece in stream:
+            if not piece:
+                continue
+            chunks.append(piece)
+            yield piece
+
+        answer = "".join(chunks).strip()
+        if not answer:
+            raise RuntimeError("Gemini did not return a valid answer.")
+
+        db.execute(
+            "UPDATE questions SET suggested_answer = ? WHERE id = ?",
+            (answer, question_id),
+        )
+        db.commit()
+        self._app.config["LAST_WORKING_GEMINI_MODEL"] = model
+
     def call_gemini_for_feedback(self, question: str, reference_answer: str, user_answer: str) -> dict:
         return self._generation_service.call_for_feedback(
             question=question,

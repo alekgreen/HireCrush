@@ -240,6 +240,17 @@ def generate_answer_for_question(
     if existing:
         return existing
 
+    question_text, question_topic = build_answer_generation_input(question)
+    answer = call_gemini_for_answer_fn(question_text, question_topic)
+    db.execute(
+        "UPDATE questions SET suggested_answer = ? WHERE id = ?",
+        (answer, question_id),
+    )
+    db.commit()
+    return answer
+
+
+def build_answer_generation_input(question) -> tuple[str, str | None]:
     question_type = (question["question_type"] or "theory") if "question_type" in question.keys() else "theory"
     if question_type == "code_review":
         code_snippet = (question["code_snippet"] or "") if "code_snippet" in question.keys() else ""
@@ -248,14 +259,8 @@ def generate_answer_for_question(
         question_text = question["text"] + code_block
     else:
         question_text = question["text"]
-
-    answer = call_gemini_for_answer_fn(question_text, question["topic"])
-    db.execute(
-        "UPDATE questions SET suggested_answer = ? WHERE id = ?",
-        (answer, question_id),
-    )
-    db.commit()
-    return answer
+    question_topic = question["topic"] if "topic" in question.keys() else None
+    return question_text, question_topic
 
 
 def format_http_error(exc) -> str:

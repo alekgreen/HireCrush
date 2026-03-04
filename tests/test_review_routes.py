@@ -1,4 +1,5 @@
 import io
+import json
 from urllib.parse import parse_qs, urlparse
 
 from app import app as flask_app
@@ -220,6 +221,45 @@ def test_review_answer_route_generates_model_answer(client, override_handler_dep
         ).fetchone()
 
     assert "replicas converge over time" in row["suggested_answer"]
+
+
+def test_review_answer_stream_route_streams_ndjson_chunks(client, override_handler_deps):
+    question_id = insert_question("Explain eventual consistency.")
+
+    def fake_stream(_question_id):
+        yield "Eventual consistency means "
+        yield "replicas converge over time."
+
+    override_handler_deps(review={"stream_answer_for_question_fn": fake_stream})
+    res = client.get(f"/review/{question_id}/answer/stream")
+
+    assert res.status_code == 200
+    assert res.mimetype == "application/x-ndjson"
+
+    lines = [line for line in res.data.decode("utf-8").splitlines() if line.strip()]
+    payloads = [json.loads(line) for line in lines]
+    assert payloads == [
+        {"type": "chunk", "text": "Eventual consistency means "},
+        {"type": "chunk", "text": "replicas converge over time."},
+        {"type": "done"},
+    ]
+
+
+def test_review_answer_stream_route_returns_error_event(client, override_handler_deps):
+    question_id = insert_question("Explain eventual consistency.")
+
+    def fake_stream(_question_id):
+        raise RuntimeError("boom")
+        yield ""
+
+    override_handler_deps(review={"stream_answer_for_question_fn": fake_stream})
+    res = client.get(f"/review/{question_id}/answer/stream")
+
+    assert res.status_code == 200
+    lines = [line for line in res.data.decode("utf-8").splitlines() if line.strip()]
+    payload = json.loads(lines[-1])
+    assert payload["type"] == "error"
+    assert "Could not generate answer" in payload["message"]
 
 
 def test_review_feedback_route_stores_feedback(client, override_handler_deps):

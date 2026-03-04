@@ -77,18 +77,22 @@ def call_for_answer(
     generate_json_fn,
     answer_json_schema: dict,
 ) -> str:
-    prompt = (
-        "You are helping a candidate prepare for interviews.\n"
-        f"Topic: {topic or 'General'}\n"
-        f"Question: {question}\n"
-        "Provide one high-quality sample answer (around 120-220 words), practical and specific."
-    )
+    prompt = build_answer_prompt(question=question, topic=topic)
     parsed = generate_json_fn(prompt, answer_json_schema, temperature=0.6)
     if isinstance(parsed, dict):
         answer = str(parsed.get("answer", "")).strip()
         if answer:
             return answer
     raise RuntimeError("Gemini did not return a valid answer.")
+
+
+def build_answer_prompt(question: str, topic: str | None) -> str:
+    return (
+        "You are helping a candidate prepare for interviews.\n"
+        f"Topic: {topic or 'General'}\n"
+        f"Question: {question}\n"
+        "Provide one high-quality sample answer (around 120-220 words), practical and specific."
+    )
 
 
 def call_for_code_review_questions(

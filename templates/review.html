@@ -67,7 +67,7 @@
               <p class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-zinc-200">{{ question.suggested_answer }}</p>
             </details>
           {% else %}
-            <form class="mt-3" method="post" action="{{ url_for('review_answer', question_id=question.id) }}">
+            <form class="mt-3" method="post" action="{{ url_for('review_answer', question_id=question.id) }}" id="model-answer-form" data-stream-url="{{ url_for('review_answer_stream', question_id=question.id) }}">
               {% for topic in selected_topics %}
                 <input type="hidden" name="topics" value="{{ topic }}">
               {% endfor %}
@@ -77,8 +77,16 @@
               {% if randomize %}
                 <input type="hidden" name="randomize" value="1">
               {% endif %}
-              <button class="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" type="submit">Generate Model Answer</button>
+              <button class="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700" id="model-answer-submit" type="submit">Generate Model Answer</button>
+              <p class="mt-2 text-xs text-slate-500 dark:text-zinc-400" id="model-answer-status"></p>
             </form>
+            <details class="mt-3 hidden rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/80" id="model-answer-live-panel" open>
+              <summary class="cursor-default text-sm font-semibold text-slate-700 dark:text-zinc-200">Live model answer</summary>
+              <p class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-zinc-200" id="model-answer-live-content"></p>
+            </details>
+            <noscript>
+              <p class="mt-2 text-xs text-slate-500 dark:text-zinc-400">Streaming requires JavaScript. Submit again to generate the full answer.</p>
+            </noscript>
           {% endif %}
         </section>
 
@@ -234,6 +242,114 @@
     </section>
   {% endif %}
 </section>
+{% if question and not question.suggested_answer %}
+  <script>
+    (() => {
+      const form = document.getElementById("model-answer-form");
+      const submitBtn = document.getElementById("model-answer-submit");
+      const statusEl = document.getElementById("model-answer-status");
+      const panelEl = document.getElementById("model-answer-live-panel");
+      const contentEl = document.getElementById("model-answer-live-content");
+
+      if (!form || !submitBtn || !statusEl || !panelEl || !contentEl) {
+        return;
+      }
+
+      let running = false;
+
+      const setStatus = (text, isError = false) => {
+        statusEl.textContent = text;
+        statusEl.classList.toggle("text-rose-600", isError);
+        statusEl.classList.toggle("dark:text-rose-300", isError);
+      };
+
+      const parseLine = (line) => {
+        if (!line) return;
+        let payload = null;
+        try {
+          payload = JSON.parse(line);
+        } catch (_err) {
+          return;
+        }
+
+        if (payload.type === "chunk") {
+          panelEl.classList.remove("hidden");
+          contentEl.textContent += String(payload.text || "");
+          return;
+        }
+        if (payload.type === "done") {
+          running = false;
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Model Answer Generated";
+          setStatus("Model answer is ready.");
+          return;
+        }
+        if (payload.type === "error") {
+          running = false;
+          submitBtn.disabled = false;
+          setStatus(String(payload.message || "Could not generate answer."), true);
+        }
+      };
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (running) {
+          return;
+        }
+
+        running = true;
+        submitBtn.disabled = true;
+        panelEl.classList.add("hidden");
+        contentEl.textContent = "";
+        setStatus("Generating model answer...");
+
+        try {
+          const streamUrl = form.dataset.streamUrl;
+          const response = await fetch(streamUrl, {
+            method: "GET",
+            headers: { Accept: "application/x-ndjson" },
+          });
+          if (!response.ok || !response.body) {
+            const errorText = await response.text();
+            throw new Error(errorText || "Streaming endpoint failed.");
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              parseLine(line.trim());
+            }
+          }
+
+          if (buffer.trim()) {
+            parseLine(buffer.trim());
+          }
+
+          if (running) {
+            running = false;
+            submitBtn.disabled = false;
+            setStatus("Could not complete answer generation.", true);
+          }
+        } catch (error) {
+          running = false;
+          submitBtn.disabled = false;
+          const message = error instanceof Error ? error.message : "Could not generate answer.";
+          setStatus(message, true);
+        }
+      });
+    })();
+  </script>
+{% endif %}
 {% if question and question.question_type == 'code_review' %}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
