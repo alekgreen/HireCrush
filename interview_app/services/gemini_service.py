@@ -1,15 +1,21 @@
 import base64
+import json
 
 SUPPORTED_AUDIO_MIME_TYPES = {
     "audio/wav",
     "audio/mp3",
     "audio/mpeg",
+    "audio/mp4",
+    "audio/m4a",
     "audio/aiff",
     "audio/aac",
     "audio/ogg",
     "audio/flac",
+    "audio/webm",
 }
 MAX_INLINE_AUDIO_BYTES = 19 * 1024 * 1024
+TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+MAX_RETRIES_PER_MODEL = 2
 
 
 def build_model_candidates(
@@ -40,6 +46,7 @@ def generate_json(
         raise RuntimeError("GEMINI_API_KEY is missing.")
 
     tried_models = []
+    transient_failures: list[tuple[str, int]] = []
     for model in model_candidates:
         tried_models.append(model)
         endpoint = (
@@ -55,26 +62,155 @@ def generate_json(
             },
         }
 
-        response = http_client.post(endpoint, json=payload, timeout=30)
-        if response.status_code == 404:
-            continue
-        response.raise_for_status()
+        for attempt in range(MAX_RETRIES_PER_MODEL + 1):
+            response = http_client.post(endpoint, json=payload, timeout=30)
+            if response.status_code == 404:
+                break
+            if response.status_code in TRANSIENT_STATUS_CODES:
+                if attempt < MAX_RETRIES_PER_MODEL:
+                    continue
+                transient_failures.append((model, response.status_code))
+                break
+            response.raise_for_status()
 
-        data = response.json()
-        options = data.get("candidates", [])
-        if not options:
-            continue
+            data = response.json()
+            options = data.get("candidates", [])
+            if not options:
+                break
 
-        parts = options[0].get("content", {}).get("parts", [])
-        if not parts:
-            continue
+            parts = options[0].get("content", {}).get("parts", [])
+            if not parts:
+                break
 
-        raw = parts[0].get("text", "")
-        parsed = parse_json_from_text_fn(raw)
-        if parsed is not None:
-            return parsed, model
+            raw = parts[0].get("text", "")
+            parsed = parse_json_from_text_fn(raw)
+            if parsed is not None:
+                return parsed, model
+            break
 
     tried_list = ", ".join(tried_models) if tried_models else "(none)"
+    if transient_failures:
+        failure_statuses = ", ".join(str(status) for _, status in transient_failures)
+        raise RuntimeError(
+            "Gemini API is temporarily unavailable for configured models. "
+            f"Tried models: {tried_list}. Last statuses: {failure_statuses}"
+        )
+    raise RuntimeError(
+        "No compatible Gemini model found for this API key. "
+        f"Tried models: {tried_list}"
+    )
+
+
+def _iter_stream_text_pieces(response):
+    emitted_text = ""
+    for raw_line in response.iter_lines(decode_unicode=True):
+        if raw_line is None:
+            continue
+        line = str(raw_line).strip()
+        if not line or not line.startswith("data:"):
+            continue
+        payload_text = line[5:].strip()
+        if not payload_text or payload_text == "[DONE]":
+            continue
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError:
+            continue
+
+        for candidate in payload.get("candidates", []):
+            parts = candidate.get("content", {}).get("parts", [])
+            for part in parts:
+                text = str(part.get("text", ""))
+                if not text:
+                    continue
+
+                if text.startswith(emitted_text):
+                    delta = text[len(emitted_text):]
+                    emitted_text = text
+                elif emitted_text.endswith(text):
+                    delta = ""
+                else:
+                    max_overlap = 0
+                    overlap_limit = min(len(emitted_text), len(text))
+                    for idx in range(1, overlap_limit + 1):
+                        if emitted_text.endswith(text[:idx]):
+                            max_overlap = idx
+                    delta = text[max_overlap:]
+                    emitted_text += delta
+
+                if delta:
+                    yield delta
+
+
+def stream_text(
+    prompt: str,
+    temperature: float,
+    api_key: str,
+    model_candidates: list[str],
+    http_client,
+):
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is missing.")
+
+    tried_models = []
+    transient_failures: list[tuple[str, int]] = []
+    for model in model_candidates:
+        tried_models.append(model)
+        endpoint = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:streamGenerateContent?alt=sse&key={api_key}"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": temperature},
+        }
+
+        for attempt in range(MAX_RETRIES_PER_MODEL + 1):
+            response = http_client.post(endpoint, json=payload, timeout=90, stream=True)
+            if response.status_code == 404:
+                close_fn = getattr(response, "close", None)
+                if callable(close_fn):
+                    close_fn()
+                break
+            if response.status_code in TRANSIENT_STATUS_CODES:
+                close_fn = getattr(response, "close", None)
+                if callable(close_fn):
+                    close_fn()
+                if attempt < MAX_RETRIES_PER_MODEL:
+                    continue
+                transient_failures.append((model, response.status_code))
+                break
+            response.raise_for_status()
+
+            pieces = _iter_stream_text_pieces(response)
+            try:
+                first_piece = next(pieces)
+            except StopIteration:
+                close_fn = getattr(response, "close", None)
+                if callable(close_fn):
+                    close_fn()
+                continue
+
+            def stream():
+                try:
+                    yield first_piece
+                    for piece in pieces:
+                        if piece:
+                            yield piece
+                finally:
+                    close_fn = getattr(response, "close", None)
+                    if callable(close_fn):
+                        close_fn()
+
+            return stream(), model
+
+    tried_list = ", ".join(tried_models) if tried_models else "(none)"
+    if transient_failures:
+        failure_statuses = ", ".join(str(status) for _, status in transient_failures)
+        raise RuntimeError(
+            "Gemini API is temporarily unavailable for configured models. "
+            f"Tried models: {tried_list}. Last statuses: {failure_statuses}"
+        )
     raise RuntimeError(
         "No compatible Gemini model found for this API key. "
         f"Tried models: {tried_list}"
@@ -88,6 +224,9 @@ def normalize_audio_mime_type(mime_type: str) -> str | None:
         "audio/x-pn-wav": "audio/wav",
         "audio/x-aiff": "audio/aiff",
         "audio/mpga": "audio/mpeg",
+        "audio/x-m4a": "audio/m4a",
+        "audio/webm;codecs=opus": "audio/webm",
+        "audio/ogg;codecs=opus": "audio/ogg",
     }
     normalized = aliases.get(mime_type.strip().lower(), mime_type.strip().lower())
     if normalized in SUPPORTED_AUDIO_MIME_TYPES:
@@ -123,6 +262,7 @@ def transcribe_audio(
     )
 
     tried_models = []
+    transient_failures: list[tuple[str, int]] = []
     for model in model_candidates:
         tried_models.append(model)
         endpoint = (
@@ -146,26 +286,39 @@ def transcribe_audio(
             "generationConfig": {"temperature": 0.0},
         }
 
-        response = http_client.post(endpoint, json=payload, timeout=60)
-        if response.status_code == 404:
-            continue
-        response.raise_for_status()
+        for attempt in range(MAX_RETRIES_PER_MODEL + 1):
+            response = http_client.post(endpoint, json=payload, timeout=60)
+            if response.status_code == 404:
+                break
+            if response.status_code in TRANSIENT_STATUS_CODES:
+                if attempt < MAX_RETRIES_PER_MODEL:
+                    continue
+                transient_failures.append((model, response.status_code))
+                break
+            response.raise_for_status()
 
-        data = response.json()
-        options = data.get("candidates", [])
-        if not options:
-            continue
+            data = response.json()
+            options = data.get("candidates", [])
+            if not options:
+                break
 
-        parts = options[0].get("content", {}).get("parts", [])
-        transcript_parts = []
-        for part in parts:
-            text = str(part.get("text", "")).strip()
-            if text:
-                transcript_parts.append(text)
-        if transcript_parts:
-            return "\n".join(transcript_parts), model
+            parts = options[0].get("content", {}).get("parts", [])
+            transcript_parts = []
+            for part in parts:
+                text = str(part.get("text", "")).strip()
+                if text:
+                    transcript_parts.append(text)
+            if transcript_parts:
+                return "\n".join(transcript_parts), model
+            break
 
     tried_list = ", ".join(tried_models) if tried_models else "(none)"
+    if transient_failures:
+        failure_statuses = ", ".join(str(status) for _, status in transient_failures)
+        raise RuntimeError(
+            "Gemini API is temporarily unavailable for configured models. "
+            f"Tried models: {tried_list}. Last statuses: {failure_statuses}"
+        )
     raise RuntimeError(
         "No compatible Gemini model found for this API key. "
         f"Tried models: {tried_list}"

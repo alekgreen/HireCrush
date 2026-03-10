@@ -1,3 +1,5 @@
+import json
+
 import requests
 
 from .deps import ReviewHandlerDeps
@@ -187,6 +189,43 @@ def review_answer_action(
     )
 
 
+def review_answer_stream_action(
+    *,
+    deps: ReviewHandlerDeps,
+    question_id: int,
+    response_class,
+    stream_with_context_fn,
+):
+    question = deps.get_question_by_id_fn(question_id)
+    if question is None:
+        payload = {"type": "error", "message": "Question not found."}
+        return response_class(
+            json.dumps(payload) + "\n",
+            status=404,
+            mimetype="application/x-ndjson",
+        )
+
+    def generate():
+        try:
+            for piece in deps.stream_answer_for_question_fn(question_id):
+                if piece:
+                    yield json.dumps({"type": "chunk", "text": piece}) + "\n"
+            yield json.dumps({"type": "done"}) + "\n"
+        except requests.HTTPError as exc:
+            yield json.dumps({"type": "error", "message": deps.format_http_error_fn(exc)}) + "\n"
+        except Exception as exc:
+            yield json.dumps({"type": "error", "message": f"Could not generate answer: {exc}"}) + "\n"
+
+    return response_class(
+        stream_with_context_fn(generate()),
+        mimetype="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 def review_feedback_action(
     *,
     deps: ReviewHandlerDeps,
@@ -268,7 +307,13 @@ def review_transcribe_action(*, deps: ReviewHandlerDeps, request_obj, jsonify_fn
     mime_type = deps.normalize_audio_mime_type_fn(audio_file.mimetype or "")
     if mime_type is None:
         return (
-            jsonify_fn({"error": "Unsupported audio format. Use WAV, MP3, AIFF, AAC, OGG, or FLAC."}),
+            jsonify_fn(
+                {
+                    "error": (
+                        "Unsupported audio format. Use MP3, M4A/MP4, WEBM, WAV, AIFF, AAC, OGG, or FLAC."
+                    )
+                }
+            ),
             400,
         )
 

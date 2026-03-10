@@ -1,6 +1,17 @@
 from collections.abc import Callable
 
-from flask import Flask, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    Response,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    stream_with_context,
+    url_for,
+)
 
 from interview_app.handlers import (
     catalog_handler,
@@ -85,6 +96,14 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
             flash_fn=flash,
             redirect_fn=redirect,
             url_for_fn=url_for,
+        )
+
+    def review_answer_stream(question_id: int):
+        return review_handler.review_answer_stream_action(
+            deps=deps_provider().review,
+            question_id=question_id,
+            response_class=Response,
+            stream_with_context_fn=stream_with_context,
         )
 
     def review_feedback(question_id: int):
@@ -218,6 +237,12 @@ def register_routes(app: Flask, deps_provider: DepsProvider) -> None:
         endpoint="review_answer",
         view_func=review_answer,
         methods=["POST"],
+    )
+    app.add_url_rule(
+        "/review/<int:question_id>/answer/stream",
+        endpoint="review_answer_stream",
+        view_func=review_answer_stream,
+        methods=["GET"],
     )
     app.add_url_rule(
         "/review/<int:question_id>/feedback",

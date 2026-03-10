@@ -47,6 +47,7 @@ class ReviewHandlerDeps:
     extract_review_filters_from_referrer_fn: Callable[[], tuple[list[str], list[tuple[str, str]], bool]]
     review_redirect_fn: Callable[..., Any]
     generate_answer_for_question_fn: Callable[[int], str]
+    stream_answer_for_question_fn: Callable[[int], Any]
     call_gemini_for_feedback_fn: Callable[..., dict]
     call_gemini_for_code_review_feedback_fn: Callable[..., dict]
     save_feedback_fn: Callable[[int, str, dict], None]

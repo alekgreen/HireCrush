@@ -50,6 +50,7 @@ class ReviewFlowInputs:
     ]
     review_redirect_fn: Callable[..., Any]
     generate_answer_for_question_fn: Callable[[int], str]
+    stream_answer_for_question_fn: Callable[[int], Any]
     call_gemini_for_feedback_fn: Callable[..., dict]
     call_gemini_for_code_review_feedback_fn: Callable[..., dict]
     save_feedback_fn: Callable[[int, str, dict], None]
@@ -138,6 +139,7 @@ def build_handler_deps_bundle(
             extract_review_filters_from_referrer_fn=inputs.review.extract_review_filters_from_referrer_fn,
             review_redirect_fn=inputs.review.review_redirect_fn,
             generate_answer_for_question_fn=inputs.review.generate_answer_for_question_fn,
+            stream_answer_for_question_fn=inputs.review.stream_answer_for_question_fn,
             call_gemini_for_feedback_fn=inputs.review.call_gemini_for_feedback_fn,
             call_gemini_for_code_review_feedback_fn=inputs.review.call_gemini_for_code_review_feedback_fn,
             save_feedback_fn=inputs.review.save_feedback_fn,
@@ -198,6 +200,7 @@ def build_handler_deps_from_namespace(namespace: ModuleType) -> HandlerDepsBundl
                 extract_review_filters_from_referrer_fn=namespace.extract_review_filters_from_referrer,
                 review_redirect_fn=namespace.review_redirect,
                 generate_answer_for_question_fn=namespace.generate_answer_for_question,
+                stream_answer_for_question_fn=namespace.stream_answer_for_question,
                 call_gemini_for_feedback_fn=namespace.call_gemini_for_feedback,
                 call_gemini_for_code_review_feedback_fn=namespace.call_gemini_for_code_review_feedback,
                 save_feedback_fn=namespace.save_feedback,

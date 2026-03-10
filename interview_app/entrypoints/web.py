@@ -276,6 +276,7 @@ def create_app(config_override: dict[str, Any] | None = None, import_name: str =
                 extract_review_filters_from_referrer_fn=extract_review_filters_from_referrer,
                 review_redirect_fn=review_redirect,
                 generate_answer_for_question_fn=runtime.generate_answer_for_question,
+                stream_answer_for_question_fn=runtime.stream_answer_for_question,
                 call_gemini_for_feedback_fn=runtime.call_gemini_for_feedback,
                 call_gemini_for_code_review_feedback_fn=runtime.call_gemini_for_code_review_feedback,
                 save_feedback_fn=feedback_repository.save_feedback,
