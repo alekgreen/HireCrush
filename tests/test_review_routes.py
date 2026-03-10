@@ -388,7 +388,7 @@ def test_review_transcribe_route_returns_json_transcript(client, override_handle
 
     res = client.post(
         "/review/transcribe",
-        data={"audio": (io.BytesIO(b"RIFFfake"), "answer.wav", "audio/wav")},
+        data={"audio": (io.BytesIO(b"WEBMfake"), "answer.webm", "audio/webm")},
     )
 
     assert res.status_code == 200

@@ -511,25 +511,30 @@
         return;
       }
 
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!navigator.mediaDevices?.getUserMedia || !AudioContextClass) {
-        statusEl.textContent = "This browser does not support microphone recording.";
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+        statusEl.textContent = "This browser does not support compressed microphone recording.";
         startBtn.disabled = true;
         return;
       }
 
-      let audioContext = null;
       let mediaStream = null;
-      let sourceNode = null;
-      let processorNode = null;
+      let mediaRecorder = null;
       let recordedBlob = null;
+      let recordedFileName = "review-answer.webm";
       let previewUrl = null;
-      let sampleRate = 44100;
-      let pcmChunks = [];
+      let recordedChunks = [];
       const voiceSettings = {
         insertMode: "append",
         cleanup: true,
       };
+      const recordingMimeCandidates = [
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/ogg",
+      ];
 
       const setStatus = (text) => {
         statusEl.textContent = text;
@@ -557,6 +562,40 @@
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+      };
+
+      const getPreferredRecordingMimeType = () => {
+        if (typeof MediaRecorder.isTypeSupported !== "function") {
+          return "";
+        }
+        return (
+          recordingMimeCandidates.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || ""
+        );
+      };
+
+      const normalizeRecordedMimeType = (mimeType) => {
+        return String(mimeType || "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+      };
+
+      const extensionForMimeType = (mimeType) => {
+        switch (normalizeRecordedMimeType(mimeType)) {
+          case "audio/mpeg":
+          case "audio/mp3":
+            return "mp3";
+          case "audio/mp4":
+          case "audio/m4a":
+          case "audio/x-m4a":
+            return "m4a";
+          case "audio/ogg":
+            return "ogg";
+          case "audio/webm":
+            return "webm";
+          default:
+            return "webm";
+        }
       };
 
       const cleanTranscriptText = (text) => {
@@ -588,66 +627,27 @@
         return cleaned;
       };
 
-      const toWavBlob = (chunks, sr) => {
-        const totalSamples = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-        const merged = new Float32Array(totalSamples);
-        let offset = 0;
-        for (const chunk of chunks) {
-          merged.set(chunk, offset);
-          offset += chunk.length;
-        }
-
-        const buffer = new ArrayBuffer(44 + merged.length * 2);
-        const view = new DataView(buffer);
-
-        const writeString = (position, text) => {
-          for (let i = 0; i < text.length; i += 1) {
-            view.setUint8(position + i, text.charCodeAt(i));
-          }
-        };
-
-        writeString(0, "RIFF");
-        view.setUint32(4, 36 + merged.length * 2, true);
-        writeString(8, "WAVE");
-        writeString(12, "fmt ");
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true);
-        view.setUint32(24, sr, true);
-        view.setUint32(28, sr * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        writeString(36, "data");
-        view.setUint32(40, merged.length * 2, true);
-
-        let dataOffset = 44;
-        for (let i = 0; i < merged.length; i += 1) {
-          const clamped = Math.max(-1, Math.min(1, merged[i]));
-          view.setInt16(dataOffset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
-          dataOffset += 2;
-        }
-
-        return new Blob([buffer], { type: "audio/wav" });
-      };
-
-      const cleanupRecorder = async () => {
-        if (processorNode) {
-          processorNode.disconnect();
-          processorNode.onaudioprocess = null;
-          processorNode = null;
-        }
-        if (sourceNode) {
-          sourceNode.disconnect();
-          sourceNode = null;
-        }
+      const cleanupRecorder = () => {
         if (mediaStream) {
           mediaStream.getTracks().forEach((track) => track.stop());
           mediaStream = null;
         }
-        if (audioContext) {
-          await audioContext.close();
-          audioContext = null;
+        mediaRecorder = null;
+      };
+
+      const finalizeRecording = () => {
+        if (!recordedChunks.length) {
+          recordedBlob = null;
+          recordedFileName = "review-answer.webm";
+          return false;
         }
+
+        const chunkMimeType = recordedChunks.find((chunk) => chunk.type)?.type || "";
+        const mimeType =
+          mediaRecorder?.mimeType || chunkMimeType || getPreferredRecordingMimeType() || "audio/webm";
+        recordedBlob = new Blob(recordedChunks, { type: mimeType });
+        recordedFileName = `review-answer.${extensionForMimeType(mimeType)}`;
+        return true;
       };
 
       settingsOpenBtn.addEventListener("click", () => {
@@ -679,7 +679,8 @@
       startBtn.addEventListener("click", async () => {
         try {
           recordedBlob = null;
-          pcmChunks = [];
+          recordedChunks = [];
+          recordedFileName = "review-answer.webm";
           transcribeBtn.disabled = true;
           preview.classList.add("hidden");
           if (previewUrl) {
@@ -691,18 +692,16 @@
           mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: audioConstraints,
           });
-          audioContext = new AudioContextClass();
-          sampleRate = audioContext.sampleRate;
-          sourceNode = audioContext.createMediaStreamSource(mediaStream);
-          processorNode = audioContext.createScriptProcessor(4096, 1, 1);
-
-          processorNode.onaudioprocess = (event) => {
-            const data = event.inputBuffer.getChannelData(0);
-            pcmChunks.push(new Float32Array(data));
+          const preferredMimeType = getPreferredRecordingMimeType();
+          mediaRecorder = preferredMimeType
+            ? new MediaRecorder(mediaStream, { mimeType: preferredMimeType })
+            : new MediaRecorder(mediaStream);
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+              recordedChunks.push(event.data);
+            }
           };
-
-          sourceNode.connect(processorNode);
-          processorNode.connect(audioContext.destination);
+          mediaRecorder.start(250);
 
           startBtn.disabled = true;
           stopBtn.disabled = false;
@@ -710,22 +709,50 @@
           setStatus("Recording... click Stop when finished.");
         } catch (error) {
           setStatus("Microphone access failed. Please allow mic access and try again.");
-          await cleanupRecorder();
+          cleanupRecorder();
           setIdle();
         }
       });
 
       stopBtn.addEventListener("click", async () => {
         stopBtn.disabled = true;
-        await cleanupRecorder();
-
-        if (!pcmChunks.length) {
-          setStatus("No audio captured. Try recording again.");
+        if (!mediaRecorder) {
+          setStatus("No active recording to stop.");
           setIdle();
           return;
         }
 
-        recordedBlob = toWavBlob(pcmChunks, sampleRate);
+        const recorder = mediaRecorder;
+        try {
+          await new Promise((resolve, reject) => {
+            recorder.addEventListener(
+              "stop",
+              () => {
+                if (!finalizeRecording()) {
+                  reject(new Error("empty-recording"));
+                  return;
+                }
+                resolve();
+              },
+              { once: true }
+            );
+            recorder.addEventListener(
+              "error",
+              () => {
+                reject(new Error("recorder-error"));
+              },
+              { once: true }
+            );
+            recorder.stop();
+          });
+        } catch (error) {
+          setStatus("No audio captured. Try recording again.");
+          cleanupRecorder();
+          setIdle();
+          return;
+        }
+
+        cleanupRecorder();
         previewUrl = URL.createObjectURL(recordedBlob);
         preview.src = previewUrl;
         preview.classList.remove("hidden");
@@ -745,7 +772,7 @@
 
         try {
           const formData = new FormData();
-          formData.append("audio", recordedBlob, "review-answer.wav");
+          formData.append("audio", recordedBlob, recordedFileName);
 
           const response = await fetch("{{ url_for('review_transcribe') }}", {
             method: "POST",

@@ -307,7 +307,13 @@ def review_transcribe_action(*, deps: ReviewHandlerDeps, request_obj, jsonify_fn
     mime_type = deps.normalize_audio_mime_type_fn(audio_file.mimetype or "")
     if mime_type is None:
         return (
-            jsonify_fn({"error": "Unsupported audio format. Use WAV, MP3, AIFF, AAC, OGG, or FLAC."}),
+            jsonify_fn(
+                {
+                    "error": (
+                        "Unsupported audio format. Use MP3, M4A/MP4, WEBM, WAV, AIFF, AAC, OGG, or FLAC."
+                    )
+                }
+            ),
             400,
         )
 
